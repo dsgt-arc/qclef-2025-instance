@@ -7,10 +7,22 @@ import numpy as np
 
 from joblib import Parallel, delayed
 from neal import SimulatedAnnealingSampler
-from helpers import QuantumBatch
+from src.models.QuantumBatch import QuantumBatch
  
 class QuboSolver():
     """
+    A solver for Quadratic Unconstrained Binary Optimization (QUBO) problems using
+    Simulated Annealing (SA) or other sampling techniques.
+
+    Attributes:
+        X (array-like): The input dataset.
+        Y (array-like): The target dataset.
+        batch_size (int): The size of each batch for processing (default is 80).
+        sampler (str): The sampling method to use, default is 'SA' (Simulated Annealing).
+        building_time (float or None): Tracks the time taken to build the QUBO matrices (default is None).
+        annealing_time (float or None): Tracks the total time spent on annealing (default is None).
+        cores (int): Number of CPU cores used for parallel processing (default is 12, from configuration).
+        num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
     def __init__(self, X, Y, batch_size=80, sampler = 'SA'):

@@ -1,3 +1,5 @@
 __pycache__/
 .vscode/
 users/alex/archive/
+src/__pycache__/
+src/models/__pycache__/
