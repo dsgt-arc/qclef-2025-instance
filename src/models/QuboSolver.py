@@ -1,10 +1,7 @@
-#import general_solver as q
 import math 
-import matplotlib.pyplot as plt
 import time
 import numpy as np
-
-
+ 
 from joblib import Parallel, delayed
 from neal import SimulatedAnnealingSampler
 from src.models.QuantumBatch import QuantumBatch
@@ -25,15 +22,17 @@ class QuboSolver():
         num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
-    def __init__(self, X, Y, batch_size=80, sampler = 'SA'):
+    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75):
         self.X = X
         self.Y = Y
         self.sampler = sampler
         self.batch_size = batch_size
         self.building_time = None
         self.annealing_time = None
-        self.cores = 12 #comes from config
-        self.num_reads = 200 #comes from config
+        self.cores = cores #comes from config
+        self.num_reads = num_reads #comes from config
+        self.batch_size = batch_size
+        self.percentage_keep = percentage_keep
  
     def run_QuboSolver(self, qmat_method, **kwargs):
         # Create batches
@@ -44,7 +43,7 @@ class QuboSolver():
         
         # This can be also parralelized if SA
         for batch in batches:
-            bqm_model = qmat_method(batch, **kwargs)
+            bqm_model = qmat_method(batch, self.percentage_keep, **kwargs)
             batch.bqm = bqm_model._create_bqm()
             
         building_time_end = time.time() 

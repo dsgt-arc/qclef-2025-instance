@@ -7,25 +7,22 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.manifold import TSNE
 from sklearn.datasets import make_moons
 
 from src.models.BQMBuilder import BcosQmatPaper
- 
-import src.models.QuboSolver as qs
-
-X, Y = make_moons(n_samples=2000, noise=0.2, random_state=42)
+from src.models.QuboSolver import QuboSolver
 
 percentage_kept = 0.75
-cores = 12
+cores = -1
 batch_size = 80
 num_reads = 2000
  
+X, Y = make_moons(n_samples=2000, noise=0.2, random_state=42)
+ 
 # TEST WITH SOME PLOT
-model = qs.QuboSolver(X, Y)
+model = QuboSolver(X, Y)
 results = model.run_QuboSolver(BcosQmatPaper, percentage_keep=percentage_kept)
 print(sum(results['results'].values())/X.shape[0])
-
  
 df = pd.DataFrame(X, columns=["x", "y"])
 df["class"] = Y  # Class 0 or 1
@@ -83,10 +80,4 @@ if filtered_handles_labels:
 
 plt.tight_layout()
 plt.show()
-print('a')
-
-
-
-# data = pd.read_csv("data/vader_nyt/bert_nytEditorialSnippets.csv")
-# X = data.iloc[:, 1:-2].values
-# Y = data.iloc[:, -2].values
+  
