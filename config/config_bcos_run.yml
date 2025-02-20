@@ -1,11 +1,11 @@
 data:
-  folds: 5
-  train_ratio: 9
-  validation: 1 
+  nr_folds: 5
+  train_percentage: 0.9
+  random_state: 123
 
 instance_selection:
   percentage_keep: 0.75
-  cores: 12
+  cores: -1
   batch_size: 80
   num_reads: 200
 
