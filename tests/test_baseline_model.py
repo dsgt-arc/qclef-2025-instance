@@ -1,30 +1,33 @@
-from src.models.BaselineModel import TokenizedDataset, RandomSamplingTrainer
+from src.models.Evaluator import Evaluator
+from src.models.RandomSolver import RandomSolver
+from src import utils
 import numpy as np
 import pandas as pd
 import torch
+import yaml
+from box import ConfigBox
 
-def load_csv_in_xy_format(csv_path: str):
-    df = pd.read_csv(csv_path, index_col=0)
-    
-    X = df.iloc[:, :-1].values.astype(np.float32)
-    y = df.iloc[:, -1].values.astype(np.int64)
+# Load config
+with open("config/config_bcos_run.yml", "r") as file:
+    config = ConfigBox(yaml.safe_load(file))
 
-    return X, y
+data = pd.read_csv("data/bert_nytEditorialSnippets.csv")
 
-X, y = load_csv_in_xy_format("data/bert_nytEditorialSnippets.csv")
+X = data.iloc[:, 1:-1].values
+y = data.iloc[:, -1].values
 
-data = [{"input_ids": torch.tensor(X[i].tolist(), dtype=torch.float32), "label": int(y[i])} for i in range(len(y))]
+orig_folds = utils.k_fold(X, y,  **config.data, printstats=True)
+is_folds = orig_folds.copy()
 
-input_dim = X.shape[1]
+#Run instance selection first for each fold
+for i in range(len(orig_folds)):
+    solver = RandomSolver(orig_folds[i][0], orig_folds[i][1])
 
-# Set hyperparameters
-sample_ratio = 0.5
-batch_size = 4
-epochs = 3
+    #Replace X_train and y_train with reduced data for is_folds
+    fold_list = list(is_folds[i])
+    fold_list[0], fold_list[1] = solver.run_solver()
+    is_folds[i] = tuple(fold_list)
 
-# Initialize the RandomSamplingTrainer
-trainer = RandomSamplingTrainer(input_dim=input_dim, num_labels=2)
-trainer.train(data=data, sample_ratio=sample_ratio, batch_size=batch_size, epochs=epochs)
-
-# Save the trained model
-torch.save(trainer.model.state_dict(), "users/chloe/models/nytEditorials_bert_baseline_model")
+evaluator = Evaluator(orig_folds, is_folds)
+results = evaluator.cross_validation()
+print(results)
