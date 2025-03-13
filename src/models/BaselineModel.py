@@ -6,10 +6,10 @@ from typing import List, Dict
 import random
 from torch.nn.utils.rnn import pad_sequence
 
-class CustomEmbeddingModel(torch.nn.Module):
-    """Custom model to use with pre-computed embeddings"""
+class BaselineEmbeddingModel(torch.nn.Module):
+    """Baseline model to use with pre-computed embeddings"""
     def __init__(self, input_dim, num_labels):
-        super(CustomEmbeddingModel, self).__init__()
+        super(BaselineEmbeddingModel, self).__init__()
         # model layer for classification on embeddings
         self.fc = torch.nn.Linear(input_dim, num_labels)
         self.softmax = torch.nn.Softmax(dim=1)
@@ -20,21 +20,23 @@ class CustomEmbeddingModel(torch.nn.Module):
         return self.softmax(x)
 
 class TokenizedDataset(Dataset):
-    """PyTorch dataset for pre-tokenized text samples."""
-    def __init__(self, data: List[Dict]):
-        """
-        Args:
-            data: List of dictionaries with 'input_ids' (embeddings) and 'label' keys.
-        """
-        self.data = data
+    """PyTorch dataset for pre-tokenized text samples.
+    
+    Attributes:
+        data: List of dictionaries with 'input_ids' (embeddings) and 'label' keys.
+    """
+    def __init__(self, X, y):
+        
+        self.X = X
+        self.y = y
 
     def __len__(self):
-        return len(self.data)
+        return len(self.X)
 
     def __getitem__(self, idx):
         return {
-            "input_ids": torch.tensor(self.data[idx]["input_ids"], dtype=torch.float32),
-            "label": torch.tensor(self.data[idx]["label"], dtype=torch.long),
+            "input_ids": torch.tensor(self.X[idx], dtype=torch.float32),
+            "label": torch.tensor(self.y[idx], dtype=torch.long),
         }
 
 def collate_fn(batch):
@@ -46,26 +48,26 @@ def collate_fn(batch):
 
     return {"input_ids": input_ids, "label": labels}
 
-class RandomSamplingTrainer:
-    """Trainer for fine-tuning transformer models using random instance selection."""
-    def __init__(self, input_dim: int, num_labels: int, device: str = None):
+class BaselineTrainer:
+    """Trainer for the baseline model
+
+    Attributes:
+        data: The reduced dataset after performing instacne selection
+        """
+    def __init__(self, X, y, input_dim: int, num_labels: int, device: str = None):
+        self.X = X
+        self.y = y
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = CustomEmbeddingModel(input_dim, num_labels).to(self.device)
+        self.model = BaselineEmbeddingModel(input_dim, num_labels).to(self.device)
         self.criterion = torch.nn.CrossEntropyLoss()
 
-    def random_sample(self, data: List[Dict], sample_ratio: float) -> List[Dict]:
-        """Randomly samples a subset of instances."""
-        sample_size = int(sample_ratio * len(data))
-        return random.sample(data, sample_size)
-
-    def train(self, data: List[Dict], sample_ratio: float, batch_size: int = 8, epochs: int = 3, lr: float = 5e-5):
+    def train(self, batch_size: int = 8, epochs: int = 3, lr: float = 5e-5):
         """
-        Runs training with random sampling.
+        Runs the training loop for the baseline model
         """
-        sampled_data = self.random_sample(data, sample_ratio)
 
-        # Create DataLoader with padding support (for if we use non pre-embedded datasets)
-        dataset = TokenizedDataset(sampled_data)
+        # Create DataLoader
+        dataset = TokenizedDataset(self.X, self.y)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
 
         optimizer = AdamW(self.model.parameters(), lr=lr)
