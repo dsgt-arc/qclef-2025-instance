@@ -5,7 +5,7 @@ from sklearn.metrics import f1_score
 import numpy as np
 
 class Evaluator:
-    def __init__(self, orig_folds, is_folds):
+    def __init__(self, orig_folds, is_folds, config):
         """
         :param folds: Complete list of (X_train, y_train, X_val, y_val, X_test, y_test) splits
         :param instance_selector: List of (X_train, y_train, X_val, y_val, X_test, y_test) splits 
@@ -14,16 +14,20 @@ class Evaluator:
         self.orig_folds = orig_folds
         self.is_folds = is_folds
         self.model = None
+        self.config = config
 
     def size_reduction(self, orig_data, is_data):
         return (len(orig_data) - len(is_data))/len(orig_data)
     
-    def train_model(self, X_train, y_train, num_labels=2, batch_size=4, epochs=3):
+    def train_model(self, X_train, y_train, X_val, y_val, num_labels=2):
         """Trains the model on selected instances."""
         input_dim = X_train.shape[1]
-        trainer = BaselineTrainer(X_train, y_train, input_dim=input_dim, num_labels=num_labels)
-        trainer.train(batch_size=batch_size, epochs=epochs)
+        trainer = BaselineTrainer(X_train, y_train, X_val, y_val, input_dim=input_dim, num_labels=num_labels)
+        trainer.train(**self.config.network_model)
         self.model = trainer.model
+        
+        # AP: here we should have a block that uses the validation sets, e.g. for early stopping or something
+        
         return self.model
 
     def evaluate_fold(self, X_test, y_test, batch_size=8):
@@ -53,12 +57,16 @@ class Evaluator:
 
         return f1_score(all_labels, all_preds, average="macro")
 
-    def cross_validation(self, num_labels=2, batch_size=8, epochs=3):
+    def cross_validation(self, num_labels=2):
         """Runs cross-validation by training a model on selected instances, and evaluating it."""
+    
+        models = []
         f1_scores = []
-        size_reductions = []
-
+        size_reductions = []    
+        
         for fold_idx, (X_train, y_train, X_val, y_val, X_test, y_test) in enumerate(self.is_folds):
+
+            
             print(f"Processing Fold {fold_idx+1}/{len(self.is_folds)}...")
 
             # Calculate Size reduction
@@ -66,10 +74,12 @@ class Evaluator:
             size_reductions.append(size_reduction)
 
             # Train model
-            self.train_model(X_train, y_train, num_labels, batch_size, epochs)
+            self.train_model(X_train, y_train, X_val, y_val, num_labels)
 
+            # Store model for inspection
+            models.append(self.model)
             # Evaluate model
-            macro_f1 = self.evaluate_fold(X_val, y_val, batch_size)
+            macro_f1 = self.evaluate_fold(X_test, y_test, self.config.network_model.batch_size)
             f1_scores.append(macro_f1)
 
             print(f"Fold {fold_idx+1}: F1 Score = {macro_f1:.4f}")

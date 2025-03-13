@@ -11,16 +11,18 @@ class RandomSolver():
         solving_time: Time taken to take the random instances
     """
 
-    def __init__(self, X, Y, percentage_keep=0.75):
+    def __init__(self, X, Y, percentage_keep=0.75, random_state=123):
         self.X = X
         self.Y = Y
         self.percentage_keep = percentage_keep
+        self.random_state=random_state
  
     def run_solver(self, **kwargs):
         """Randomly samples instances based on percentage_keep"""
         solving_time_start = time.time()
         
-        num_samples = int(len(self.X) * self.percentage_keep)        
+        num_samples = int(len(self.X) * self.percentage_keep) 
+        np.random.seed(self.random_state)       
         sampled_indices = np.random.choice(len(self.X), num_samples, replace=False)
 
         sampled_X = self.X[sampled_indices]
