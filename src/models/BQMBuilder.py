@@ -17,7 +17,7 @@ class BQMBuilder(ABC):
 
     def __init__(self, batch):
         self.batch = batch
-    
+
     @abstractmethod
     def _build_q_matrix(self):
         """
@@ -87,9 +87,11 @@ class BcosQmatPaper(BQMBuilder):
         percentage_keep (float): The fraction of variables to be kept in the optimization.
     """
 
-    def __init__(self, batch, percentage_keep):
+    def __init__(self, batch, percentage_keep, sample_size):
         super().__init__(batch)
         self.percentage_keep = percentage_keep
+        self.sample_size = sample_size
+    
     
     def _find_k(self):
         """
@@ -120,7 +122,9 @@ class BcosQmatPaper(BQMBuilder):
         Returns:
             float: The computed class balance coefficient.
         """
-        return (self.batch.Ybatch).sum() / self.batch.Ybatch.shape[0]
+        _, counts = np.unique(self.batch.Ybatch, return_counts=True)
+        diag_values = [counts[i]/self.sample_size for i in self.batch.Ybatch]
+        return diag_values  
   
     def _bcos_off_diagonal(self):
         """
@@ -150,7 +154,8 @@ class BcosQmatPaper(BQMBuilder):
         Qmat = self._bcos_off_diagonal()
         
         # Compute and set class balance for diagonal elements
-        for i in range(len(self.batch.Ybatch)):
-            Qmat[i, i] = self._class_balance_diagonal()
+        
+        counts = self._class_balance_diagonal()
+        np.fill_diagonal(Qmat, counts)
 
         return Qmat

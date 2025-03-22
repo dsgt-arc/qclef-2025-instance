@@ -22,7 +22,7 @@ class QuboSolver():
         num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
-    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75):
+    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75, random_state=123):
         self.X = X
         self.Y = Y
         self.sampler = sampler
@@ -33,6 +33,7 @@ class QuboSolver():
         self.num_reads = num_reads #comes from config
         self.batch_size = batch_size
         self.percentage_keep = percentage_keep
+        self.random_state = random_state
  
     def run_QuboSolver(self, qmat_method, **kwargs):
         # Create batches
@@ -43,7 +44,7 @@ class QuboSolver():
         
         # This can be also parralelized if SA
         for batch in batches:
-            bqm_model = qmat_method(batch, self.percentage_keep, **kwargs)
+            bqm_model = qmat_method(batch, self.percentage_keep, self.Y.shape[0], **kwargs)
             batch.bqm = bqm_model._create_bqm()
             
         building_time_end = time.time() 
@@ -67,10 +68,15 @@ class QuboSolver():
         building_time = building_time_end - building_time_start
         annealing_time = annealing_time_end - annealing_time_start
 
+        sampled_X = self.X[np.array(list(final_results.values()))==1,:]
+        sampled_Y = self.Y[np.array(list(final_results.values()))==1]
+    
         output = {
             'results': final_results,
             'annealing_time_total': annealing_time,
-            'building_time': building_time
+            'building_time': building_time,
+            'sampled_X': sampled_X,
+            'sampled_Y': sampled_Y
 
         }
         # Return the results and the time statistics
