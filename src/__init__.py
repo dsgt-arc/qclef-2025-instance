@@ -1,2 +1,2 @@
 from . import utils
-from .models import BaselineModel, BQMBuilder, QuantumBatch, QuboSolver
+from .models import BQMBuilder, QuantumBatch, QuboSolver

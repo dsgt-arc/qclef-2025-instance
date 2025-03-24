@@ -5,7 +5,13 @@ import numpy as np
 from joblib import Parallel, delayed
 from neal import SimulatedAnnealingSampler
 from src.models.QuantumBatch import QuantumBatch
- 
+from dwave.system.samplers import DWaveSampler
+from dwave.system.composites import EmbeddingComposite
+from dwave.system import LeapHybridSampler
+
+from qclef import qa_access as qa
+import pdb
+
 class QuboSolver():
     """
     A solver for Quadratic Unconstrained Binary Optimization (QUBO) problems using
@@ -44,31 +50,52 @@ class QuboSolver():
         
         # This can be also parralelized if SA
         for batch in batches:
-            bqm_model = qmat_method(batch, self.percentage_keep, **kwargs)
+ 
+            bqm_model = qmat_method(batch, self.percentage_keep, self.Y.shape[0], **kwargs)
             batch.bqm = bqm_model._create_bqm()
             
         building_time_end = time.time() 
-         
+        
+        annealing_time_start = time.time()
+        results = []
+        problem_ids = []
+
+        if self.sampler=='QA':
+            for i in range(len(batches)):
+                results_tmp, problem_id = self.get_best_instances_qa(batches[i], i=i)
+                results.append(results_tmp)
+                problem_ids.append(problem_id)
+ 
+             
         if self.sampler=='SA':
             # Run the annealer
-            annealing_time_start = time.time()
-            results = Parallel(n_jobs=self.cores)(delayed(self.get_best_instances_multiprocess_sa)(
-                        batch,
-                        num_reads=self.num_reads,
-                    ) for batch in batches)
+            
+            # results = Parallel(n_jobs=self.cores)(delayed(self.get_best_instances_multiprocess_sa)(
+            #             batch,
+            #             num_reads=self.num_reads,
+            #         ) for batch in batches)
+            # annealing_time_start2 = time.time()
+            # print(annealing_time_start2-annealing_time_start1)
+            
+            # annealing_time_start3 = time.time()
+            
+            for i in range(len(batches)):
+                results_tmp, problem_id = self.get_best_instances_multiprocess_sa(batches[i], i=i)
+                results.append(results_tmp)
+                problem_ids.append(problem_id)
 
-            final_results = {}
+            
+        annealing_time_end = time.time()
+        final_results = {}
 
-            for res in results:
+        for res in results:
                 final_results.update(res)
-
-            annealing_time_end = time.time()
-      
+                
          # Collect the time for (i) Qmat formulation and for (ii) Annealing
         building_time = building_time_end - building_time_start
         annealing_time = annealing_time_end - annealing_time_start
 
-        sampled_X = self.X[np.array(list(final_results.values()))==1,:]
+        sampled_X = self.X.iloc[np.array(list(final_results.values()))==1, :]
         sampled_Y = self.Y[np.array(list(final_results.values()))==1]
     
         output = {
@@ -76,38 +103,47 @@ class QuboSolver():
             'annealing_time_total': annealing_time,
             'building_time': building_time,
             'sampled_X': sampled_X,
-            'sampled_Y': sampled_Y
-
+            'sampled_Y': sampled_Y,
+            'problem_ids': problem_ids
         }
+        
         # Return the results and the time statistics
         return output
-    
-    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, num_reads=100):
+
+    def get_best_instances_qa(self, batch: QuantumBatch, i: int, num_reads=100):
+        sampler = EmbeddingComposite(DWaveSampler())
+        
+        kbqm = batch.bqm
+        response = qa.submit(sampler, EmbeddingComposite.sample, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
+   
+        final_response = {}
+
+        for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
+            final_response[var] = response.first.sample[index]
+
+        return final_response, response.info['problem_id'] 
+            
+          
+    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, i:int, num_reads=100):
         """
         Samples from the batch using the Simulated Annealing algorithm 
         and returns immediately the response. This is done synchronously
         since there is no network involved and we can exploit parallelization
         to speed up this operation.
+        TODO: Needs to be done multiprocess
         """
         sampler = SimulatedAnnealingSampler()
         
-        response = self._run_sa_sampler(sampler, batch, num_reads)
-        
+        kbqm = batch.bqm
+         
+        response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
+
         final_response = {}
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
+   
+        return final_response, response.info['problem_id'] 
         
-        return final_response
-
-    def _run_sa_sampler(self, sampler, batch, num_reads):
-        """
-        Formulates the problem according to the batch and k provided and
-        then samples it.
-        """
-        kbqm = batch.bqm
-        response = sampler.sample(kbqm, label=batch.label, num_reads=num_reads)
-        return response 
-
     def _split_in_batches(self, batch_size, start_index=0):
         """Splits the provided initial matrix into batches having size that can be at max
         the specified one.
@@ -138,7 +174,7 @@ class QuboSolver():
         range_end = start_index
  
         embedding_computed = None
-
+        # ALL k BATCHES FIRST (FULL)
         for i in range(number_one_more):
             range_end += (X_splitted[i].shape[0])
             batch=QuantumBatch(
@@ -152,6 +188,7 @@ class QuboSolver():
 
             # Quantum part will come here for the embedding
 
+        # LAST BATCH
         for i in range(number_one_more, len(X_splitted)):
             range_end += (X_splitted[i].shape[0])
             batch=QuantumBatch(
