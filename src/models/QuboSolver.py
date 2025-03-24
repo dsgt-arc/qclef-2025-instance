@@ -10,7 +10,8 @@ from dwave.system.composites import EmbeddingComposite
 from dwave.system import LeapHybridSampler
 
 from qclef import qa_access as qa
- 
+import pdb
+
 class QuboSolver():
     """
     A solver for Quadratic Unconstrained Binary Optimization (QUBO) problems using
@@ -54,15 +55,17 @@ class QuboSolver():
             batch.bqm = bqm_model._create_bqm()
             
         building_time_end = time.time() 
-         
-        if self.sampler=='QA':
-            annealing_time_start = time.time()
-            results = []
-            for i in range(len(batches)):
-                results_tmp = self.get_best_instances_qa(batches[i])
-                results.append(results_tmp)
+        
+        annealing_time_start = time.time()
+        results = []
+        problem_ids = []
 
-            annealing_time_end = time.time()
+        if self.sampler=='QA':
+            for i in range(len(batches)):
+                results_tmp, problem_id = self.get_best_instances_qa(batches[i], i=i)
+                results.append(results_tmp)
+                problem_ids.append(problem_id)
+ 
              
         if self.sampler=='SA':
             # Run the annealer
@@ -76,14 +79,13 @@ class QuboSolver():
             
             # annealing_time_start3 = time.time()
             
-            annealing_time_start = time.time()
-            results = []
             for i in range(len(batches)):
-                results_tmp = self.get_best_instances_multiprocess_sa(batches[i])
+                results_tmp, problem_id = self.get_best_instances_multiprocess_sa(batches[i], i=i)
                 results.append(results_tmp)
+                problem_ids.append(problem_id)
 
-            annealing_time_end = time.time()
-        
+            
+        annealing_time_end = time.time()
         final_results = {}
 
         for res in results:
@@ -101,23 +103,28 @@ class QuboSolver():
             'annealing_time_total': annealing_time,
             'building_time': building_time,
             'sampled_X': sampled_X,
-            'sampled_Y': sampled_Y
+            'sampled_Y': sampled_Y,
+            'problem_ids': problem_ids
         }
         
         # Return the results and the time statistics
         return output
 
     def get_best_instances_qa(self, batch: QuantumBatch, i: int, num_reads=100):
-        sampler = DWaveSampler(solver={'name': 'Advantage_system7.1'})
+        sampler = EmbeddingComposite(DWaveSampler())
         
         kbqm = batch.bqm
-        response = qa.submit(sampler, sampler.sample, kbqm, label=f'batch_{i}', num_reads=num_reads)
+        response = qa.submit(sampler, EmbeddingComposite.sample, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
+   
         final_response = {}
+
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
+
+        return final_response, response.info['problem_id'] 
             
           
-    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, num_reads=100):
+    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, i:int, num_reads=100):
         """
         Samples from the batch using the Simulated Annealing algorithm 
         and returns immediately the response. This is done synchronously
@@ -127,23 +134,16 @@ class QuboSolver():
         """
         sampler = SimulatedAnnealingSampler()
         
-        response = self._run_sa_sampler(sampler, batch, num_reads)
-        
+        kbqm = batch.bqm
+         
+        response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
+
         final_response = {}
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
+   
+        return final_response, response.info['problem_id'] 
         
-        return final_response
-
-    def _run_sa_sampler(self, sampler, batch, num_reads):
-        """
-        Formulates the problem according to the batch and k provided and
-        then samples it.
-        """
-        kbqm = batch.bqm
-        response = sampler.sample(kbqm, label=batch.label, num_reads=num_reads)
-        return response 
-
     def _split_in_batches(self, batch_size, start_index=0):
         """Splits the provided initial matrix into batches having size that can be at max
         the specified one.
