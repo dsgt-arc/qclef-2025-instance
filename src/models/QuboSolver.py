@@ -3,7 +3,7 @@ import time
 import numpy as np
  
 from joblib import Parallel, delayed
-from neal import SimulatedAnnealingSampler
+from dwave.samplers import SimulatedAnnealingSampler
 from src.models.QuantumBatch import QuantumBatch
 from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
@@ -112,10 +112,13 @@ class QuboSolver():
 
     def get_best_instances_qa(self, batch: QuantumBatch, i: int, num_reads=100):
         sampler = EmbeddingComposite(DWaveSampler())
-        
+        #sampler = LeapHybridSampler()
         kbqm = batch.bqm
+
+        pdb.set_trace()
         response = qa.submit(sampler, EmbeddingComposite.sample, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
    
+
         final_response = {}
 
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):

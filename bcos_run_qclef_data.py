@@ -39,5 +39,6 @@ for i in tqdm(range(5)):
             file.write(f"{sample_point}\n")
          
         file.write(f"{str(bcos_results['problem_ids'])}\n")
- 
+
+pdb.set_trace()
  
