@@ -14,8 +14,7 @@ import numpy as np
 # Load config
 with open("config/config_bcos_run_org_example.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
-    
- 
+     
 random_state=0
 
 random.seed(random_state)
@@ -37,13 +36,12 @@ plt.title('2D Points with 5 Classes')
 plt.legend()
 plt.grid(True)
 plt.show()
-
-
+ 
 bcos_model = QuboSolver(X, y, **config.instance_selection)
 bcos_results = bcos_model.run_QuboSolver(BcosQmatPaper)
- 
+  
+selected_points = np.where(np.array(list(bcos_results['results'].values())) == 1)[0]
 
-selected_points = list(bcos_results['results'].values())
 colors = ['blue', 'green', 'red', 'orange', 'magenta']
 
 # Plot the selected points

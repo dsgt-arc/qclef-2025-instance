@@ -5,8 +5,8 @@ data:
 instance_selection:
   percentage_keep: 0.75
   cores: -1
-  batch_size: 500
-  num_reads: 200
+  batch_size: 80
+  num_reads: 100
   random_state: 123
 
 network_model:

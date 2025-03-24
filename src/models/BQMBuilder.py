@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from numpy.linalg import norm
 import numpy as np
 import dimod
+from scipy.spatial.distance import cdist
 
 class BQMBuilder(ABC):
     """
@@ -122,8 +123,10 @@ class BcosQmatPaper(BQMBuilder):
         Returns:
             float: The computed class balance coefficient.
         """
-        _, counts = np.unique(self.batch.Ybatch, return_counts=True)
-        diag_values = [counts[i]/self.sample_size for i in self.batch.Ybatch]
+        vals, counts = np.unique(self.batch.Ybatch, return_counts=True)
+    
+        diag_values = [counts[vals==i]/self.sample_size for i in self.batch.Ybatch]
+ 
         return diag_values  
   
     def _bcos_off_diagonal(self):
@@ -143,7 +146,25 @@ class BcosQmatPaper(BQMBuilder):
         cosine_matrix = np.where(same_class, np.abs(cosine_matrix), -np.abs(cosine_matrix))
         
         return cosine_matrix
-    
+     
+    def _beuc_off_diagonal(self):
+        """
+        Computes the off-diagonal elements of the QUBO matrix based on Euclidean distance.
+
+        Returns:
+            np.ndarray: A matrix where each element represents the distance between data points.
+        """
+        # Compute raw Euclidean distances
+        distance_matrix = cdist(self.batch.Xbatch, self.batch.Xbatch, metric='euclidean')
+
+        Y_reshaped = self.batch.Ybatch.reshape(-1, 1)
+        same_class = (Y_reshaped == Y_reshaped.T)
+
+        # Apply the appropriate sign based on class similarity
+        distance_matrix = np.where(same_class, np.abs(distance_matrix), -np.abs(distance_matrix))
+
+        return distance_matrix
+        
     def _build_q_matrix(self):
         """
         Constructs the QUBO matrix by combining diagonal and off-diagonal elements.
@@ -152,10 +173,10 @@ class BcosQmatPaper(BQMBuilder):
             np.ndarray: The constructed QUBO matrix.
         """
         Qmat = self._bcos_off_diagonal()
-        
+        #Qmat = self._beuc_off_diagonal()
         # Compute and set class balance for diagonal elements
         
-        counts = self._class_balance_diagonal()
-        np.fill_diagonal(Qmat, counts)
-
+        normalized_counts = self._class_balance_diagonal()
+        np.fill_diagonal(Qmat, normalized_counts)
+ 
         return Qmat
