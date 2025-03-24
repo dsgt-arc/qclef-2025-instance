@@ -6,47 +6,50 @@ from typing import List, Dict
 import random
 from torch.nn.utils.rnn import pad_sequence
 
-class BaselineEmbeddingModel(torch.nn.Module):
-    """Baseline model to use with pre-computed embeddings"""
-    def __init__(self, input_dim, num_labels):
-        super(BaselineEmbeddingModel, self).__init__()
-        # model layer for classification on embeddings
-        self.fc = torch.nn.Linear(input_dim, num_labels)
-        #self.softmax = torch.nn.Softmax(dim=1)
-
-    def forward(self, embeddings):
-        # embeddings shape: (batch_size, embedding_dim)
-        x = self.fc(embeddings)
-        return x #self.softmax(x)
-
 class TokenizedDataset(Dataset):
     """PyTorch dataset for pre-tokenized text samples.
     
     Attributes:
         data: List of dictionaries with 'input_ids' (embeddings) and 'label' keys.
     """
-    def __init__(self, X, y):
+    def __init__(self, texts, labels, tokenizer, max_length=128):
         
-        self.X = X
-        self.y = y
+        self.X = texts
+        self.y = labels
+        self.max_length = max_length
+        self.tokenizer = tokenizer
 
     def __len__(self):
         return len(self.X)
 
     def __getitem__(self, idx):
+        encoding = self.tokenizer(
+            self.X[idx], 
+            padding="max_length", 
+            truncation=True, 
+            max_length=self.max_length, 
+            return_tensors="pt"
+        )
         return {
-            "input_ids": torch.tensor(self.X[idx], dtype=torch.float32),
-            "label": torch.tensor(self.y[idx], dtype=torch.long),
+            "input_ids": encoding["input_ids"].squeeze(0), 
+            "attention_mask": encoding["attention_mask"].squeeze(0), 
+            "labels": torch.tensor(self.y[idx], dtype=torch.long)
         }
 
 def collate_fn(batch):
-    """Collate function to dynamically pad sequences (if needed)."""
-    input_ids = [item["input_ids"] for item in batch]
-    labels = torch.stack([item["label"] for item in batch])
+    """Collate function to dynamically batch tokenized sequences."""
+    input_ids = torch.stack([item["input_ids"] for item in batch])
+    attention_mask = torch.stack([item["attention_mask"] for item in batch])
+    labels = torch.stack([item["labels"] for item in batch])
 
-    input_ids = torch.stack(input_ids)
+    return {
+        "input_ids": input_ids, 
+        "attention_mask": attention_mask, 
+        "labels": labels
+    }
 
-    return {"input_ids": input_ids, "label": labels}
+# Load and compile our model
+bert_model = "distilbert-base-uncased"
 
 class BaselineTrainer:
     """Trainer for the baseline model
@@ -54,13 +57,14 @@ class BaselineTrainer:
     Attributes:
         data: The reduced dataset after performing instacne selection
         """
-    def __init__(self, X_train, y_train, X_val, y_val, input_dim: int, num_labels: int, device: str = None):
-        self.X_train = X_train
+    def __init__(self, X_train, y_train, X_val, y_val, model, tokenizer, input_dim: int, num_labels: int, device: str = None):
+        self.X_train = [str(text) for text in X_train]
         self.y_train = y_train
-        self.X_val = X_val
+        self.X_val = [str(text) for text in X_val]
         self.y_val = y_val
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = BaselineEmbeddingModel(input_dim, num_labels).to(self.device)
+        self.tokenizer = tokenizer
+        self.model = model
         self.criterion = torch.nn.CrossEntropyLoss()
 
     def train(self, batch_size: int = 8, epochs: int = 3, lr: float = 5e-5, patience=5):
@@ -69,8 +73,8 @@ class BaselineTrainer:
         """
 
         # Create DataLoader
-        dataset_train = TokenizedDataset(self.X_train, self.y_train)
-        dataset_val = TokenizedDataset(self.X_val, self.y_val)
+        dataset_train = TokenizedDataset(texts = self.X_train, labels = self.y_train, tokenizer = self.tokenizer)
+        dataset_val = TokenizedDataset(texts = self.X_val, labels = self.y_val, tokenizer = self.tokenizer)
         
         train_dataloader = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
         val_dataloader = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
@@ -87,20 +91,21 @@ class BaselineTrainer:
             all_preds, all_labels = [], []
 
             for batch in train_dataloader:
-                embeddings = batch["input_ids"].to(self.device)  # Use precomputed embeddings directly
-                labels = batch["label"].to(self.device)
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                labels = batch["labels"].to(self.device)
 
                 optimizer.zero_grad()
 
                 # Feed embeddings to the model
-                outputs = self.model(embeddings)
-                loss = self.criterion(outputs, labels)
+                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                loss = self.criterion(outputs.logits, labels)
                 loss.backward()
                 optimizer.step()
 
                 total_loss += loss.item()
 
-                preds = torch.argmax(outputs, dim=1).cpu().numpy()
+                preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
                 all_preds.extend(preds)
                 all_labels.extend(labels.cpu().numpy())
 
@@ -116,14 +121,15 @@ class BaselineTrainer:
 
             with torch.no_grad():
                 for batch in val_dataloader:
-                    embeddings = batch["input_ids"].to(self.device)
-                    labels = batch["label"].to(self.device)
+                    input_ids = batch["input_ids"].to(self.device)
+                    attention_mask = batch["attention_mask"].to(self.device)
+                    labels = batch["labels"].to(self.device)
 
-                    outputs = self.model(embeddings)
-                    loss = self.criterion(outputs, labels)
+                    outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                    loss = self.criterion(outputs.logits, labels)
                     val_loss += loss.item()
 
-                    preds = torch.argmax(outputs, dim=1).cpu().numpy()
+                    preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
                     val_preds.extend(preds)
                     val_labels.extend(labels.cpu().numpy())
 
