@@ -1,11 +1,13 @@
-from src.models.BaselineModel import BaselineTrainer
-from torch.utils.data import DataLoader, TensorDataset
+from src.models.BaselineModel import BaselineTrainer, TokenizedDataset
+from torch.utils.data import DataLoader
 import torch
 from sklearn.metrics import f1_score
 import numpy as np
+from transformers import AutoTokenizer
+from transformers import AutoModelForSequenceClassification
 
 class Evaluator:
-    def __init__(self, orig_folds, is_folds, config):
+    def __init__(self, orig_folds, is_folds, config, bert_model: str ="distilbert-base-uncased", num_labels: int = 2, device: str = None):
         """
         :param folds: Complete list of (X_train, y_train, X_val, y_val, X_test, y_test) splits
         :param instance_selector: List of (X_train, y_train, X_val, y_val, X_test, y_test) splits 
@@ -13,44 +15,47 @@ class Evaluator:
         """
         self.orig_folds = orig_folds
         self.is_folds = is_folds
-        self.model = None
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(bert_model)
+        self.bert_model = bert_model
+        self.num_labels = num_labels
         self.config = config
 
     def size_reduction(self, orig_data, is_data):
         return (len(orig_data) - len(is_data))/len(orig_data)
     
-    def train_model(self, X_train, y_train, X_val, y_val, num_labels=2):
+    def train_model(self, X_train, y_train, X_val, y_val):
         """Trains the model on selected instances."""
+        
         input_dim = X_train.shape[1]
-        trainer = BaselineTrainer(X_train, y_train, X_val, y_val, input_dim=input_dim, num_labels=num_labels)
+        model = AutoModelForSequenceClassification.from_pretrained(self.bert_model, num_labels=self.num_labels).to(self.device)
+        trainer = BaselineTrainer(X_train, y_train, X_val, y_val, model, self.tokenizer, input_dim=input_dim, num_labels=self.num_labels)
         trainer.train(**self.config.network_model)
-        self.model = trainer.model
         
         # AP: here we should have a block that uses the validation sets, e.g. for early stopping or something
         
-        return self.model
+        return trainer.model
 
-    def evaluate_fold(self, X_test, y_test, batch_size=8):
+    def evaluate_fold(self, model, X_test, y_test, batch_size=8):
         """Evaluates the trained model on a single test dataset."""
-        if self.model is None:
-            raise ValueError("Model has not been trained yet.")
+        model.eval()
+        model.to(self.device)
 
-        self.model.eval()
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model.to(device)
+        X_test = [str(text) for text in X_test]
 
-        dataset = TensorDataset(torch.tensor(X_test, dtype=torch.float32), 
-                                torch.tensor(y_test, dtype=torch.long))
+        dataset = TokenizedDataset(texts = X_test, labels = y_test, tokenizer = self.tokenizer)
         dataloader = DataLoader(dataset, batch_size=batch_size)
 
         all_preds, all_labels = [], []
 
         with torch.no_grad():
             for batch in dataloader:
-                embeddings, labels = batch[0].to(device), batch[1].to(device)
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                labels = batch["labels"].to(self.device)
 
-                outputs = self.model(embeddings)
-                preds = torch.argmax(outputs, dim=1).cpu().numpy()
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
 
                 all_preds.extend(preds)
                 all_labels.extend(labels.cpu().numpy())
@@ -65,7 +70,6 @@ class Evaluator:
         size_reductions = []    
         
         for fold_idx, (X_train, y_train, X_val, y_val, X_test, y_test) in enumerate(self.is_folds):
-
             
             print(f"Processing Fold {fold_idx+1}/{len(self.is_folds)}...")
 
@@ -74,12 +78,11 @@ class Evaluator:
             size_reductions.append(size_reduction)
 
             # Train model
-            self.train_model(X_train, y_train, X_val, y_val, num_labels)
+            model = self.train_model(X_train, y_train, X_val, y_val)
+            models.append(model)
 
-            # Store model for inspection
-            models.append(self.model)
             # Evaluate model
-            macro_f1 = self.evaluate_fold(X_test, y_test, self.config.network_model.batch_size)
+            macro_f1 = self.evaluate_fold(model, X_test, y_test, self.config.network_model.batch_size)
             f1_scores.append(macro_f1)
 
             print(f"Fold {fold_idx+1}: F1 Score = {macro_f1:.4f}")

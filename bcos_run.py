@@ -11,11 +11,10 @@ from box import ConfigBox
 with open("config/config_bcos_run.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
 
-
 # Load and split data
-data = pd.read_csv("data/vader_nyt/bert_nytEditorialSnippets.csv")
-X = data.iloc[:, 1:-2].values
-Y = data.iloc[:, -2].values
+data = pd.read_csv("data/raw_binned_nytEditorialSnippets.csv")
+X = data.iloc[:, 3:-1].values
+Y = data.iloc[:, -1].values
 
 # data is a list of tuples. Each tuple looks like this: (X_train, y_train, X_val, y_val, X_test, y_test)
 # X_val, y_val should go in the transformer's validation set, X_test and y_test should be untouched and used for true out of sample evaluation as in the paper Table 3 & Figure 3
