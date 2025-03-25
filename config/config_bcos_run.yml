@@ -8,6 +8,7 @@ instance_selection:
   batch_size: 80
   num_reads: 200
   random_state: 123
+  sleep: 3
 
 network_model:
   batch_size: 32

@@ -8,6 +8,7 @@ from src.models.QuantumBatch import QuantumBatch
 from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
 from dwave.system import LeapHybridSampler
+from dwave.system import LazyFixedEmbeddingComposite
 
 from qclef import qa_access as qa
 import pdb
@@ -28,7 +29,7 @@ class QuboSolver():
         num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
-    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75, random_state=123):
+    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75, random_state=123, sleep=3):
         self.X = X
         self.Y = Y
         self.sampler = sampler
@@ -40,6 +41,7 @@ class QuboSolver():
         self.batch_size = batch_size
         self.percentage_keep = percentage_keep
         self.random_state = random_state
+        self.sleep = sleep
  
     def run_QuboSolver(self, qmat_method, **kwargs):
         # Create batches
@@ -61,12 +63,20 @@ class QuboSolver():
         problem_ids = []
 
         if self.sampler=='QA':
+            sampler_fixed = LazyFixedEmbeddingComposite(DWaveSampler())
+            sampler_fixed_func = LazyFixedEmbeddingComposite.sample
+            sampler_last = EmbeddingComposite(DWaveSampler())
+            sampler_last_func = EmbeddingComposite.sample
+      
             for i in range(len(batches)):
-                results_tmp, problem_id = self.get_best_instances_qa(batches[i], i=i)
+                if i < len(batches) - 1:                
+                    results_tmp, problem_id = self.get_best_instances_qa(sampler_fixed, sampler_fixed_func, batches[i], i=i)
+                else:
+                    results_tmp, problem_id = self.get_best_instances_qa(sampler_last, sampler_last_func, batches[i], i=i)
+                
                 results.append(results_tmp)
                 problem_ids.append(problem_id)
- 
-             
+     
         if self.sampler=='SA':
             # Run the annealer
             
@@ -110,19 +120,20 @@ class QuboSolver():
         # Return the results and the time statistics
         return output
 
-    def get_best_instances_qa(self, batch: QuantumBatch, i: int, num_reads=100):
-        sampler = EmbeddingComposite(DWaveSampler())
-        #sampler = LeapHybridSampler()
+    def get_best_instances_qa(self, sampler, func, batch: QuantumBatch, i: int, num_reads=100):
         kbqm = batch.bqm
 
-        pdb.set_trace()
-        response = qa.submit(sampler, EmbeddingComposite.sample, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
-   
+      
+        response = qa.submit(sampler, func, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
 
         final_response = {}
-
+      
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
+
+        print(f"Processed problem_id {response.info['problem_id']}")
+
+        time.sleep(self.sleep)
 
         return final_response, response.info['problem_id'] 
             
@@ -163,45 +174,24 @@ class QuboSolver():
 
         """
         batches = []
-
-        # The batches having one more samples if the division is not integer
-        number_one_more = self.X.shape[0] % math.ceil(
-            self.X.shape[0]/batch_size)
-        
-        X_splitted = np.array_split(
-            self.X, math.ceil(self.X.shape[0]/batch_size), axis=0)
-        Y_splitted = np.array_split(
-            self.Y, math.ceil(self.Y.shape[0]/batch_size), axis=0)
-        
+        num_samples = self.X.shape[0]
         range_start = start_index
-        range_end = start_index
- 
         embedding_computed = None
-        # ALL k BATCHES FIRST (FULL)
-        for i in range(number_one_more):
-            range_end += (X_splitted[i].shape[0])
-            batch=QuantumBatch(
-                Xbatch=X_splitted[i],
+
+        for i in range(0, num_samples, batch_size):
+            X_batch = self.X[i:i+batch_size]
+            Y_batch = self.Y[i:i+batch_size]
+            range_end = range_start + len(X_batch)
+
+            batch = QuantumBatch(
+                Xbatch=X_batch,
                 embedding=embedding_computed,
                 docs_range=np.arange(range_start, range_end),
-                Ybatch=Y_splitted[i]
+                Ybatch=Y_batch
             )
-            batches.append(batch)
-            range_start += (X_splitted[i].shape[0])
 
-            # Quantum part will come here for the embedding
-
-        # LAST BATCH
-        for i in range(number_one_more, len(X_splitted)):
-            range_end += (X_splitted[i].shape[0])
-            batch=QuantumBatch(
-                Xbatch=X_splitted[i],
-                embedding=embedding_computed,
-                docs_range=np.arange(range_start, range_end),
-                Ybatch =Y_splitted[i]
-            )
             batches.append(batch)
-            range_start += (X_splitted[i].shape[0])
+            range_start = range_end
         
         return batches
  
