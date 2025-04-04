@@ -21,7 +21,7 @@ X, Y = make_moons(n_samples=2000, noise=0.2, random_state=42)
  
 # TEST WITH SOME PLOT
 model = QuboSolver(X, Y)
-results = model.run_QuboSolver(BcosQmatPaper, percentage_keep=percentage_kept)
+results = model.run_QuboSolver(BcosQmatPaper)
 print(sum(results['results'].values())/X.shape[0])
  
 df = pd.DataFrame(X, columns=["x", "y"])
@@ -81,3 +81,4 @@ if filtered_handles_labels:
 plt.tight_layout()
 plt.show()
   
+print('a')

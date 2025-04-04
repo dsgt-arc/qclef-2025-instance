@@ -29,7 +29,7 @@ class QuboSolver():
         num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
-    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75, random_state=123, sleep=3):
+    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA-local', percentage_keep=0.75, random_state=123, sleep=3):
         self.X = X
         self.Y = Y
         self.sampler = sampler
