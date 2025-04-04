@@ -32,8 +32,8 @@ data_is_bcos = []
 method = 'SA-local' #SA, QA
 
 # Prepare IS data folds
-#for fold in range(len(data_raw_text)):
-for fold in range(1):
+for fold in range(len(data_raw_text)):
+#for fold in range(1):
     # For the random solver, it does not matter if we sample randomly on the 
     baseline = RandomSolver(data_raw_text[fold][0], data_raw_text[fold][1], percentage_keep=config.instance_selection.percentage_keep, random_state=config.instance_selection.random_state)
     sampled_X_baseline, sampled_Y_baseline = baseline.run_solver()  
@@ -64,7 +64,7 @@ results_baseline = eval_baseline.cross_validation()
 eval_bcos = Evaluator(orig_folds = data_raw_text, is_folds=data_is_bcos, config=config)
 results_bcos = eval_bcos.cross_validation()
 
-# print(f'Full sample: {results_full}')
+print(f'Full sample: {results_full}')
 print(f'Baseline: {results_baseline}')
 print(f'Bcos: {results_bcos}')
 
