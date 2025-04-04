@@ -12,7 +12,7 @@ with open("config/config_bcos_run.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
 
 # Load and split data
-data = pd.read_csv("data/raw_binned_nytEditorialSnippets.csv")
+data = pd.read_csv("data/vader_nyt/raw_binned_nytEditorialSnippets.csv")
 X = data.iloc[:, 3:-1].values
 Y = data.iloc[:, -1].values
 

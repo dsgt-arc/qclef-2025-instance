@@ -10,7 +10,7 @@ from dwave.system.composites import EmbeddingComposite
 from dwave.system import LeapHybridSampler
 from dwave.system import LazyFixedEmbeddingComposite
 
-from qclef import qa_access as qa
+#from qclef import qa_access as qa
 import pdb
 
 class QuboSolver():
