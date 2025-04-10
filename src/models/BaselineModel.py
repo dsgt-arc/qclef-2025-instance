@@ -12,7 +12,7 @@ class TokenizedDataset(Dataset):
     Attributes:
         data: List of dictionaries with 'input_ids' (embeddings) and 'label' keys.
     """
-    def __init__(self, texts, labels, tokenizer, max_length=128):
+    def __init__(self, texts, labels, tokenizer, max_length=256):
         
         self.X = texts
         self.y = labels

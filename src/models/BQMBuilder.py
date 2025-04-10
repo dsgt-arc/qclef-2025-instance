@@ -161,8 +161,8 @@ class BcosQmatPaper(BQMBuilder):
         same_class = (Y_reshaped == Y_reshaped.T)
 
         # Apply the appropriate sign based on class similarity
-        distance_matrix = np.where(same_class, np.abs(distance_matrix), -np.abs(distance_matrix))
-
+        #distance_matrix = np.where(same_class, np.abs(distance_matrix), -np.abs(distance_matrix))
+        distance_matrix = np.where(same_class, -np.abs(distance_matrix), np.abs(distance_matrix))
         return distance_matrix
         
     def _build_q_matrix(self):
