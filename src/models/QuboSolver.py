@@ -90,6 +90,7 @@ class QuboSolver():
             
             for i in range(len(batches)):
                 results_tmp = self.get_best_instances_multiprocess_sa(batches[i])
+                # results_tmp, problem_id = self.get_best_instances_multiprocess_sa(batches[i])
                 results.append(results_tmp)
                 # problem_ids.append(problem_id)
 
