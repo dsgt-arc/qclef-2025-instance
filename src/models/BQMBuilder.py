@@ -3,6 +3,10 @@ from numpy.linalg import norm
 import numpy as np
 import dimod
 from scipy.spatial.distance import cdist
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
 
 class BQMBuilder(ABC):
     """
@@ -91,8 +95,7 @@ class BcosQmatPaper(BQMBuilder):
     def __init__(self, batch, percentage_keep, sample_size):
         super().__init__(batch)
         self.percentage_keep = percentage_keep
-        self.sample_size = sample_size
-    
+        self.sample_size = sample_size    
     
     def _find_k(self):
         """
@@ -177,6 +180,142 @@ class BcosQmatPaper(BQMBuilder):
         # Compute and set class balance for diagonal elements
         
         normalized_counts = self._class_balance_diagonal()
+        np.fill_diagonal(Qmat, normalized_counts)
+ 
+        return Qmat
+    
+class DeletionDiagnostics(BQMBuilder):
+    """
+    This class builds QUBO matrices using the cook's distance of data points found by 
+    iteratively deleting instances and retraining the model.
+
+    Attributes:
+        batch (QuantumBatch): The batch of data for which the QUBO matrix is constructed.
+        percentage_keep (float): The fraction of variables to be kept in the optimization.
+    """
+
+    def __init__(self, batch, percentage_keep, sample_size):
+        super().__init__(batch)
+        self.percentage_keep = percentage_keep
+        self.sample_size = sample_size
+    
+    def _find_k(self):
+        """
+        Determines the number of variables to be retained in the optimization.
+
+        Returns:
+            int: The computed value of k.
+        """
+        return int((self.batch.Xbatch.shape[0]) * self.percentage_keep)
+    
+    def _create_bqm(self):
+        """
+        Constructs the Binary Quadratic Model (BQM) for the given batch.
+
+        Returns:
+            dimod.BinaryQuadraticModel: The formulated BQM.
+        """
+        k = self._find_k()
+        return self._build_bqm(k)
+
+    def _cooks_distance_diagonal(self):
+        """
+        Computes the class balance coefficient for diagonal elements in the QUBO matrix.
+
+        The balance coefficient adjusts the weight of diagonal elements to account for class imbalance
+        in binary classification tasks.
+
+        Returns:
+            float: The computed class balance coefficient.
+        """
+        influence_scores = self._compute_influence_logistic()
+ 
+        return influence_scores
+    
+    def _compute_influence_logistic(self, target_class=1, cv=5):
+        """
+        Computes influence scores for training instances using logistic regression.
+        
+        Parameters:
+            X_train (ndarray): Training features.
+            y_train (ndarray): Training labels.
+            X_test (ndarray): Test features.
+            target_class (int): The class for which to measure influence.
+            cv (int): Number of folds for cross-validation in logistic regression.
+
+        Returns:
+            influence_scores (ndarray): Influence scores for each training instance.
+        """
+        
+        # Train logistic regression with automatic hyperparameter tuning
+        model = LogisticRegressionCV(cv=cv, solver='lbfgs', max_iter=1000, random_state=42)
+        model.fit(self.batch.Xbatch, self.batch.Ybatch)
+        
+        baseline_probs = model.predict_proba(self.batch.Xbatch)[:, target_class]
+
+        print("batches type", type(self.batch.Xbatch))
+        influence_scores = np.zeros(len(self.batch.Xbatch))
+
+        # Leave-one-out retraining
+        for i in range(len(self.batch.Xbatch)):
+            X_subset = np.delete(self.batch.Xbatch, i, axis=0)
+            y_subset = np.delete(self.batch.Ybatch, i, axis=0)
+            
+            model.fit(X_subset, y_subset)
+            new_probs = model.predict_proba(self.batch.Xbatch)[:, target_class]
+            
+            influence_scores[i] = np.mean(np.abs(new_probs - baseline_probs))
+
+        return influence_scores
+  
+    def _bcos_off_diagonal(self):
+        """
+        Computes the off-diagonal elements of the QUBO matrix based on cosine similarity.
+
+        Returns:
+            np.ndarray: A matrix where each element represents the similarity between data points.
+        """
+        norms = norm(self.batch.Xbatch, axis=1, keepdims=True) 
+        cosine_matrix = (self.batch.Xbatch @ self.batch.Xbatch.T) / (norms @ norms.T)
+
+        Y_reshaped = self.batch.Ybatch.reshape(-1, 1)
+        same_class = (Y_reshaped == Y_reshaped.T)
+
+        # Apply the appropriate sign based on class similarity
+        cosine_matrix = np.where(same_class, np.abs(cosine_matrix), -np.abs(cosine_matrix))
+        
+        return cosine_matrix
+     
+    def _beuc_off_diagonal(self):
+        """
+        Computes the off-diagonal elements of the QUBO matrix based on Euclidean distance.
+
+        Returns:
+            np.ndarray: A matrix where each element represents the distance between data points.
+        """
+        # Compute raw Euclidean distances
+        distance_matrix = cdist(self.batch.Xbatch, self.batch.Xbatch, metric='euclidean')
+
+        Y_reshaped = self.batch.Ybatch.reshape(-1, 1)
+        same_class = (Y_reshaped == Y_reshaped.T)
+
+        # Apply the appropriate sign based on class similarity
+        distance_matrix = np.where(same_class, np.abs(distance_matrix), -np.abs(distance_matrix))
+
+        return distance_matrix
+        
+    def _build_q_matrix(self):
+        """
+        Constructs the QUBO matrix by combining diagonal and off-diagonal elements.
+
+        Returns:
+            np.ndarray: The constructed QUBO matrix.
+        """
+        Qmat = self._bcos_off_diagonal()
+        #Qmat = self._beuc_off_diagonal()
+        # Compute and set class balance for diagonal elements
+        
+        normalized_counts = self._cooks_distance_diagonal()
         np.fill_diagonal(Qmat, normalized_counts)
  
         return Qmat

@@ -10,7 +10,7 @@ from dwave.system.composites import EmbeddingComposite
 from dwave.system import LeapHybridSampler
 from dwave.system import LazyFixedEmbeddingComposite
 
-from qclef import qa_access as qa
+# from qclef import qa_access as qa
 import pdb
 
 class QuboSolver():
@@ -62,37 +62,36 @@ class QuboSolver():
         results = []
         problem_ids = []
 
-        if self.sampler=='QA':
-            sampler_fixed = LazyFixedEmbeddingComposite(DWaveSampler())
-            sampler_fixed_func = LazyFixedEmbeddingComposite.sample
-            sampler_last = EmbeddingComposite(DWaveSampler())
-            sampler_last_func = EmbeddingComposite.sample
+        # if self.sampler=='QA':
+        #     sampler_fixed = LazyFixedEmbeddingComposite(DWaveSampler())
+        #     sampler_fixed_func = LazyFixedEmbeddingComposite.sample
+        #     sampler_last = EmbeddingComposite(DWaveSampler())
+        #     sampler_last_func = EmbeddingComposite.sample
       
-            for i in range(len(batches)):
-                if i < len(batches) - 1:                
-                    results_tmp, problem_id = self.get_best_instances_qa(sampler_fixed, sampler_fixed_func, batches[i], i=i)
-                else:
-                    results_tmp, problem_id = self.get_best_instances_qa(sampler_last, sampler_last_func, batches[i], i=i)
+        #     for i in range(len(batches)):
+        #         if i < len(batches) - 1:                
+        #             results_tmp, problem_id = self.get_best_instances_qa(sampler_fixed, sampler_fixed_func, batches[i], i=i)
+        #         else:
+        #             results_tmp, problem_id = self.get_best_instances_qa(sampler_last, sampler_last_func, batches[i], i=i)
                 
-                results.append(results_tmp)
-                problem_ids.append(problem_id)
+        #         results.append(results_tmp)
+        #         problem_ids.append(problem_id)
      
         if self.sampler=='SA':
             # Run the annealer
             
             # results = Parallel(n_jobs=self.cores)(delayed(self.get_best_instances_multiprocess_sa)(
             #             batch,
-            #             num_reads=self.num_reads,
+            #             num_reads=self.num_reads
             #         ) for batch in batches)
             # annealing_time_start2 = time.time()
-            # print(annealing_time_start2-annealing_time_start1)
             
             # annealing_time_start3 = time.time()
             
             for i in range(len(batches)):
-                results_tmp, problem_id = self.get_best_instances_multiprocess_sa(batches[i], i=i)
+                results_tmp = self.get_best_instances_multiprocess_sa(batches[i])
                 results.append(results_tmp)
-                problem_ids.append(problem_id)
+                # problem_ids.append(problem_id)
 
             
         annealing_time_end = time.time()
@@ -105,40 +104,44 @@ class QuboSolver():
         building_time = building_time_end - building_time_start
         annealing_time = annealing_time_end - annealing_time_start
 
-        sampled_X = self.X.iloc[np.array(list(final_results.values()))==1, :]
-        sampled_Y = self.Y[np.array(list(final_results.values()))==1]
+        sampled_X_idx = np.array(list(final_results.values()))==1
+        sampled_Y_idx = np.array(list(final_results.values()))==1
+        sampled_X = self.X[sampled_X_idx, :]
+        sampled_Y = self.Y[sampled_Y_idx]
     
         output = {
             'results': final_results,
             'annealing_time_total': annealing_time,
             'building_time': building_time,
             'sampled_X': sampled_X,
+            'sampled_X_idx': sampled_X_idx,
             'sampled_Y': sampled_Y,
+            'sampled_Y_idx': sampled_Y_idx,
             'problem_ids': problem_ids
         }
         
         # Return the results and the time statistics
         return output
 
-    def get_best_instances_qa(self, sampler, func, batch: QuantumBatch, i: int, num_reads=100):
-        kbqm = batch.bqm
+    # def get_best_instances_qa(self, sampler, func, batch: QuantumBatch, i: int, num_reads=100):
+    #     kbqm = batch.bqm
 
       
-        response = qa.submit(sampler, func, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
+    #     response = qa.submit(sampler, func, kbqm, label=f'2 QA-batch_{i}', num_reads=num_reads)
 
-        final_response = {}
+    #     final_response = {}
       
-        for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
-            final_response[var] = response.first.sample[index]
+    #     for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
+    #         final_response[var] = response.first.sample[index]
 
-        print(f"Processed problem_id {response.info['problem_id']}")
+    #     print(f"Processed problem_id {response.info['problem_id']}")
 
-        time.sleep(self.sleep)
+    #     time.sleep(self.sleep)
 
-        return final_response, response.info['problem_id'] 
+    #     return final_response, response.info['problem_id'] 
             
           
-    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, i:int, num_reads=100):
+    def get_best_instances_multiprocess_sa(self, batch: QuantumBatch, num_reads=100):
         """
         Samples from the batch using the Simulated Annealing algorithm 
         and returns immediately the response. This is done synchronously
@@ -149,14 +152,16 @@ class QuboSolver():
         sampler = SimulatedAnnealingSampler()
         
         kbqm = batch.bqm
+
+        response = sampler.sample(kbqm, num_reads=num_reads, seed=12)
          
-        response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
+        # response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
 
         final_response = {}
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
    
-        return final_response, response.info['problem_id'] 
+        return final_response #response.info['problem_id'] 
         
     def _split_in_batches(self, batch_size, start_index=0):
         """Splits the provided initial matrix into batches having size that can be at max
