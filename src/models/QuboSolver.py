@@ -9,7 +9,7 @@ from dwave.system.samplers import DWaveSampler
 from dwave.system.composites import EmbeddingComposite
 from dwave.system import LeapHybridSampler
 from dwave.system import LazyFixedEmbeddingComposite
-
+from tqdm import tqdm
 # from qclef import qa_access as qa
 import pdb
 
@@ -51,7 +51,7 @@ class QuboSolver():
         building_time_start = time.time()
         
         # This can be also parralelized if SA
-        for batch in batches:
+        for batch in tqdm(batches):
  
             bqm_model = qmat_method(batch, self.percentage_keep, self.Y.shape[0], **kwargs)
             batch.bqm = bqm_model._create_bqm()

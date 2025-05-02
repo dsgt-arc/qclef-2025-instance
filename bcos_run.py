@@ -1,7 +1,7 @@
 from src import utils
 import pandas as pd
 import yaml
-from src.models.BQMBuilder import BcosQmatPaper
+from src.models.BQMBuilder import BcosQmatPaper, IterativeDeletion#, GLMInfluence
 from src.models.QuboSolver import QuboSolver
 from src.models.RandomSolver import RandomSolver
 from src.models.Evaluator import Evaluator
@@ -28,6 +28,8 @@ data_raw_text, data_embeddings = utils.k_fold(X_raw_text=X, y_raw_text=Y, X_embe
 
 data_is_baseline = []
 data_is_bcos = []
+data_is_iterative_deletion = []
+data_is_cookD_GLM = []
 
 method = 'SA-local' #SA, QA
 
@@ -41,20 +43,29 @@ for fold in range(len(data_raw_text)):
     bcos_model = QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection)
     bcos_results = bcos_model.run_QuboSolver(BcosQmatPaper)
     
+    iterative_deletion_model = QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection)
+    iterative_deletion_results = iterative_deletion_model.run_QuboSolver(IterativeDeletion)
+    
+    # GLMInfluence_model =  QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection)
+    # GLMInfluence_results = GLMInfluence_model.run_QuboSolver(GLMInfluence)
     # --- need to take the appropriate indices here and now
     
     sampled_indices_X_bcos = bcos_results['indices_X']
     sampled_indices_y_bcos = bcos_results['indices_y']
+   
+    sampled_indices_X_cooksD = iterative_deletion_results['indices_X']
+    sampled_indices_y_cooksD = iterative_deletion_results['indices_y']
      
     is_folds_baseline = (sampled_X_baseline, sampled_Y_baseline, data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
     is_folds_bcos = (data_raw_text[fold][0][sampled_indices_X_bcos], data_raw_text[fold][1][sampled_indices_y_bcos], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
+    is_folds_iterative_deletion = (data_raw_text[fold][0][sampled_indices_X_cooksD], data_raw_text[fold][1][sampled_indices_y_cooksD], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
     
     data_is_baseline.append(is_folds_baseline)
     data_is_bcos.append(is_folds_bcos)
+    data_is_iterative_deletion.append(is_folds_iterative_deletion)
     
     print(f'<TRAIN DATA>: shape original X data in fold {fold}: {data_raw_text[fold][0].shape}; Random Baseline reduced X data shape: {sampled_X_baseline.shape} ')
     
-
 eval_full =  Evaluator(orig_folds=data_raw_text, is_folds=data_raw_text, config=config)
 results_full = eval_full.cross_validation()
 
@@ -64,10 +75,13 @@ results_baseline = eval_baseline.cross_validation()
 eval_bcos = Evaluator(orig_folds = data_raw_text, is_folds=data_is_bcos, config=config)
 results_bcos = eval_bcos.cross_validation()
 
+eval_cooksD = Evaluator(orig_folds = data_raw_text, is_folds=data_is_iterative_deletion, config=config)
+results_cooksD = eval_cooksD.cross_validation()
+
 print(f'Full sample: {results_full}')
 print(f'Baseline: {results_baseline}')
 print(f'Bcos: {results_bcos}')
-
+print(f'CooksD: {results_cooksD}')
 print('a')
     
 

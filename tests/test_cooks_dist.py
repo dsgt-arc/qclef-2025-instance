@@ -1,7 +1,7 @@
 from src import utils
 import pandas as pd
 import yaml
-from src.models.BQMBuilder import BcosQmatPaper, DeletionDiagnostics
+from src.models.BQMBuilder import BcosQmatPaper, IterativeDeletion
 from src.models.QuboSolver import QuboSolver
 from src.models.RandomSolver import RandomSolver
 from src.models.Evaluator import Evaluator
@@ -30,7 +30,7 @@ for fold in range(len(data)):
     sampled_X_baseline, sampled_Y_baseline = baseline.run_solver()  
 
     cooks_model = QuboSolver(data_embed[fold][0], data_embed[fold][1], **config.instance_selection)
-    cooks_results = cooks_model.run_QuboSolver(DeletionDiagnostics)
+    cooks_results = cooks_model.run_QuboSolver(IterativeDeletion)
     sampled_X_cooks = data[fold][0][cooks_results['sampled_X_idx'], :]
     sampled_Y_cooks = data[fold][1][cooks_results['sampled_Y_idx']]
  

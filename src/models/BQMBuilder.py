@@ -3,10 +3,11 @@ from numpy.linalg import norm
 import numpy as np
 import dimod
 from scipy.spatial.distance import cdist
-from sklearn.linear_model import LogisticRegressionCV
+from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-
+from statsmodels.genmod import families
+from statsmodels.genmod.generalized_linear_model import GLM
 
 class BQMBuilder(ABC):
     """
@@ -184,7 +185,7 @@ class BcosQmatPaper(BQMBuilder):
  
         return Qmat
     
-class DeletionDiagnostics(BQMBuilder):
+class IterativeDeletion(BQMBuilder):
     """
     This class builds QUBO matrices using the cook's distance of data points found by 
     iteratively deleting instances and retraining the model.
@@ -248,24 +249,25 @@ class DeletionDiagnostics(BQMBuilder):
         """
         
         # Train logistic regression with automatic hyperparameter tuning
-        model = LogisticRegressionCV(cv=cv, solver='lbfgs', max_iter=1000, random_state=42)
-        model.fit(self.batch.Xbatch, self.batch.Ybatch)
+        baseline_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42)
+        baseline_model.fit(self.batch.Xbatch, self.batch.Ybatch)
         
-        baseline_probs = model.predict_proba(self.batch.Xbatch)[:, target_class]
-
-        print("batches type", type(self.batch.Xbatch))
+        baseline_probs = baseline_model.predict_proba(self.batch.Xbatch)[:, target_class]
+       
         influence_scores = np.zeros(len(self.batch.Xbatch))
 
         # Leave-one-out retraining
         for i in range(len(self.batch.Xbatch)):
             X_subset = np.delete(self.batch.Xbatch, i, axis=0)
             y_subset = np.delete(self.batch.Ybatch, i, axis=0)
+            reduced_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42) 
+            reduced_model.fit(X_subset, y_subset)
+            #reduced_model.fit(X_subset, y_subset)
             
-            model.fit(X_subset, y_subset)
-            new_probs = model.predict_proba(self.batch.Xbatch)[:, target_class]
+            new_probs = reduced_model.predict_proba(self.batch.Xbatch)[:, target_class]
             
             influence_scores[i] = np.mean(np.abs(new_probs - baseline_probs))
-
+ 
         return influence_scores
   
     def _bcos_off_diagonal(self):
@@ -285,24 +287,7 @@ class DeletionDiagnostics(BQMBuilder):
         cosine_matrix = np.where(same_class, np.abs(cosine_matrix), -np.abs(cosine_matrix))
         
         return cosine_matrix
-     
-    def _beuc_off_diagonal(self):
-        """
-        Computes the off-diagonal elements of the QUBO matrix based on Euclidean distance.
-
-        Returns:
-            np.ndarray: A matrix where each element represents the distance between data points.
-        """
-        # Compute raw Euclidean distances
-        distance_matrix = cdist(self.batch.Xbatch, self.batch.Xbatch, metric='euclidean')
-
-        Y_reshaped = self.batch.Ybatch.reshape(-1, 1)
-        same_class = (Y_reshaped == Y_reshaped.T)
-
-        # Apply the appropriate sign based on class similarity
-        distance_matrix = np.where(same_class, np.abs(distance_matrix), -np.abs(distance_matrix))
-
-        return distance_matrix
+    
         
     def _build_q_matrix(self):
         """
@@ -317,5 +302,7 @@ class DeletionDiagnostics(BQMBuilder):
         
         normalized_counts = self._cooks_distance_diagonal()
         np.fill_diagonal(Qmat, normalized_counts)
+        
+        # we can probably ignore the one for the class as the distribution is the same.
  
         return Qmat
