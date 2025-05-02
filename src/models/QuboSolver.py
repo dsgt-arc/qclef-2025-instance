@@ -29,7 +29,7 @@ class QuboSolver():
         num_reads (int): Number of reads per batch when running the annealer (default is 200, from configuration).
     """
 
-    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA', percentage_keep=0.75, random_state=123, sleep=3):
+    def __init__(self, X, Y, batch_size=80, cores=12, num_reads=12, sampler = 'SA-local', percentage_keep=0.75, random_state=123, sleep=3):
         self.X = X
         self.Y = Y
         self.sampler = sampler
@@ -77,7 +77,7 @@ class QuboSolver():
                 results.append(results_tmp)
                 problem_ids.append(problem_id)
      
-        if self.sampler=='SA':
+        if self.sampler=='SA' or self.sampler=='SA-local':
             # Run the annealer
             
             # results = Parallel(n_jobs=self.cores)(delayed(self.get_best_instances_multiprocess_sa)(
@@ -93,8 +93,7 @@ class QuboSolver():
                 results_tmp, problem_id = self.get_best_instances_multiprocess_sa(batches[i], i=i)
                 results.append(results_tmp)
                 problem_ids.append(problem_id)
-
-            
+ 
         annealing_time_end = time.time()
         final_results = {}
 
@@ -105,7 +104,7 @@ class QuboSolver():
         building_time = building_time_end - building_time_start
         annealing_time = annealing_time_end - annealing_time_start
 
-        sampled_X = self.X.iloc[np.array(list(final_results.values()))==1, :]
+        sampled_X = self.X[np.array(list(final_results.values()))==1, :]
         sampled_Y = self.Y[np.array(list(final_results.values()))==1]
     
         output = {
@@ -114,7 +113,9 @@ class QuboSolver():
             'building_time': building_time,
             'sampled_X': sampled_X,
             'sampled_Y': sampled_Y,
-            'problem_ids': problem_ids
+            'problem_ids': problem_ids,
+            'indices_X': np.array(list(final_results.values()))==1,
+            'indices_y': np.array(list(final_results.values()))==1
         }
         
         # Return the results and the time statistics
@@ -149,14 +150,18 @@ class QuboSolver():
         sampler = SimulatedAnnealingSampler()
         
         kbqm = batch.bqm
-         
-        response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
+        if self.sampler=='SA-local':
+            response = sampler.sample(kbqm, label=batch.label, num_reads=num_reads)
+        else:
+            response = qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
 
         final_response = {}
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
-   
-        return final_response, response.info['problem_id'] 
+        if self.sampler=='SA-local':
+            return final_response, None
+        else:
+            return final_response, response.info['problem_id'] 
         
     def _split_in_batches(self, batch_size, start_index=0):
         """Splits the provided initial matrix into batches having size that can be at max
