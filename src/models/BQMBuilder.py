@@ -8,6 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from statsmodels.genmod import families
 from statsmodels.genmod.generalized_linear_model import GLM
+from sklearn.svm import SVC
 
 class BQMBuilder(ABC):
     """
@@ -184,6 +185,103 @@ class BcosQmatPaper(BQMBuilder):
         np.fill_diagonal(Qmat, normalized_counts)
  
         return Qmat
+     
+class SVC_diagonal(BQMBuilder):
+    def __init__(self, batch, percentage_keep, sample_size):
+        super().__init__(batch)
+        self.percentage_keep = percentage_keep
+        self.sample_size = sample_size
+        
+    def _find_k(self):
+            """
+            Determines the number of variables to be retained in the optimization.
+
+            Returns:
+                int: The computed value of k.
+            """
+            return int((self.batch.Xbatch.shape[0]) * self.percentage_keep)
+    
+    def _create_bqm(self):
+        """
+        Constructs the Binary Quadratic Model (BQM) for the given batch.
+
+        Returns:
+            dimod.BinaryQuadraticModel: The formulated BQM.
+        """
+        k = self._find_k()
+        return self._build_bqm(k)
+
+    def _svc_distance_diagonal(self):
+        return self._svc_margin_diagonal()   
+    
+    def _svc_margin_diagonal(self, kernel="rbf", C=1.0, gamma="scale",
+                             inverse=True, normalise=True, eps=1e-12):
+        """
+        Uses an SVC as a *surrogate model* and turns each training
+        point's margin distance into an influence score.
+
+        Parameters
+        ----------
+        kernel, C, gamma : standard SVC hyper-parameters.
+        inverse  : if True, score = 1 / (|margin| + eps)
+                   else     score = -|margin|
+        normalise: rescale scores to [0, 1] for numerical stability.
+        eps      : small constant to avoid division by zero.
+
+        Returns
+        -------
+        scores : ndarray, shape (n_samples,)
+                 Higher  ⇒ more influential.
+        """
+        X, y = self.batch.Xbatch, self.batch.Ybatch
+
+        svc = SVC(kernel=kernel, C=C, gamma=gamma, probability=False)
+        svc.fit(X, y)
+
+        margin_dist = np.abs(svc.decision_function(X))
+
+        if inverse:
+            scores = 1.0 / (margin_dist + eps)        # small margin should get bigger score
+
+        if normalise:
+            scores /= scores.max()
+
+        return -scores
+    
+    def _bcos_off_diagonal(self):
+        """
+        Computes the off-diagonal elements of the QUBO matrix based on cosine similarity.
+
+        Returns:
+            np.ndarray: A matrix where each element represents the similarity between data points.
+        """
+        norms = norm(self.batch.Xbatch, axis=1, keepdims=True) 
+        cosine_matrix = (self.batch.Xbatch @ self.batch.Xbatch.T) / (norms @ norms.T)
+
+        Y_reshaped = self.batch.Ybatch.reshape(-1, 1)
+        same_class = (Y_reshaped == Y_reshaped.T)
+
+        # Apply the appropriate sign based on class similarity
+        cosine_matrix = np.where(same_class, np.abs(cosine_matrix), -np.abs(cosine_matrix))
+        
+        return cosine_matrix
+    
+    def _build_q_matrix(self):
+        """
+        Constructs the QUBO matrix by combining diagonal and off-diagonal elements.
+
+        Returns:
+            np.ndarray: The constructed QUBO matrix.
+        """
+        Qmat = self._bcos_off_diagonal()
+        #Qmat = self._beuc_off_diagonal()
+        # Compute and set class balance for diagonal elements
+        
+        distance_to_margin = self._svc_distance_diagonal()
+        np.fill_diagonal(Qmat, distance_to_margin)
+        
+        return Qmat
+    
     
 class IterativeDeletion(BQMBuilder):
     """
@@ -230,7 +328,7 @@ class IterativeDeletion(BQMBuilder):
             float: The computed class balance coefficient.
         """
         influence_scores = self._compute_influence_logistic()
- 
+   
         return influence_scores
     
     def _compute_influence_logistic(self, target_class=1, cv=5):
@@ -249,26 +347,27 @@ class IterativeDeletion(BQMBuilder):
         """
         
         # Train logistic regression with automatic hyperparameter tuning
-        baseline_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42)
-        baseline_model.fit(self.batch.Xbatch, self.batch.Ybatch)
+        n = len(self.batch.Xbatch)
+        baseline = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42)
+        baseline.fit(self.batch.Xbatch, self.batch.Ybatch)
         
-        baseline_probs = baseline_model.predict_proba(self.batch.Xbatch)[:, target_class]
+        baseline_probs = baseline.predict_proba(self.batch.Xbatch)[:, target_class]
        
-        influence_scores = np.zeros(len(self.batch.Xbatch))
+        influence_scores = np.empty(n)
 
         # Leave-one-out retraining
-        for i in range(len(self.batch.Xbatch)):
-            X_subset = np.delete(self.batch.Xbatch, i, axis=0)
-            y_subset = np.delete(self.batch.Ybatch, i, axis=0)
+        for i in range(n):
+            mask = np.ones(n, dtype=bool)
+            mask[i] = False
+            X_sub, y_sub = self.batch.Xbatch[mask], self.batch.Ybatch[mask]
             reduced_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42) 
-            reduced_model.fit(X_subset, y_subset)
-            #reduced_model.fit(X_subset, y_subset)
+            reduced_model.fit(X_sub, y_sub)
             
             new_probs = reduced_model.predict_proba(self.batch.Xbatch)[:, target_class]
             
             influence_scores[i] = np.mean(np.abs(new_probs - baseline_probs))
  
-        return influence_scores
+        return -influence_scores
   
     def _bcos_off_diagonal(self):
         """
@@ -287,8 +386,7 @@ class IterativeDeletion(BQMBuilder):
         cosine_matrix = np.where(same_class, np.abs(cosine_matrix), -np.abs(cosine_matrix))
         
         return cosine_matrix
-    
-        
+     
     def _build_q_matrix(self):
         """
         Constructs the QUBO matrix by combining diagonal and off-diagonal elements.
@@ -300,8 +398,8 @@ class IterativeDeletion(BQMBuilder):
         #Qmat = self._beuc_off_diagonal()
         # Compute and set class balance for diagonal elements
         
-        normalized_counts = self._cooks_distance_diagonal()
-        np.fill_diagonal(Qmat, normalized_counts)
+        cooks_distances = self._cooks_distance_diagonal()
+        np.fill_diagonal(Qmat, cooks_distances)
         
         # we can probably ignore the one for the class as the distribution is the same.
  

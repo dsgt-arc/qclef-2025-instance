@@ -1,7 +1,7 @@
 from src import utils
 import pandas as pd
 import yaml
-from src.models.BQMBuilder import BcosQmatPaper, IterativeDeletion#, GLMInfluence
+from src.models.BQMBuilder import BcosQmatPaper, IterativeDeletion, SVC_diagonal
 from src.models.QuboSolver import QuboSolver
 from src.models.RandomSolver import RandomSolver
 from src.models.Evaluator import Evaluator
@@ -29,7 +29,7 @@ data_raw_text, data_embeddings = utils.k_fold(X_raw_text=X, y_raw_text=Y, X_embe
 data_is_baseline = []
 data_is_bcos = []
 data_is_iterative_deletion = []
-data_is_cookD_GLM = []
+data_is_SVC_diagonal_model_results = []
 
 method = 'SA-local' #SA, QA
 
@@ -46,23 +46,28 @@ for fold in range(len(data_raw_text)):
     iterative_deletion_model = QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection)
     iterative_deletion_results = iterative_deletion_model.run_QuboSolver(IterativeDeletion)
     
-    # GLMInfluence_model =  QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection)
-    # GLMInfluence_results = GLMInfluence_model.run_QuboSolver(GLMInfluence)
-    # --- need to take the appropriate indices here and now
+    SVC_diagonal_model =  QuboSolver(data_embeddings[fold][0], data_embeddings[fold][1], sampler=method, **config.instance_selection) #add all the relevant things to the config.
+    SVC_diagonal_model_results = SVC_diagonal_model.run_QuboSolver(SVC_diagonal) 
     
+    # --- need to take the appropriate indices here and now
     sampled_indices_X_bcos = bcos_results['indices_X']
     sampled_indices_y_bcos = bcos_results['indices_y']
    
-    sampled_indices_X_cooksD = iterative_deletion_results['indices_X']
-    sampled_indices_y_cooksD = iterative_deletion_results['indices_y']
+    sampled_indices_X_iterative_deletion = iterative_deletion_results['indices_X']
+    sampled_indices_y_iterative_deletion= iterative_deletion_results['indices_y']
+     
+    sampled_indices_X_SVC = SVC_diagonal_model_results['indices_X']
+    sampled_indices_y_SVC = SVC_diagonal_model_results['indices_y']
      
     is_folds_baseline = (sampled_X_baseline, sampled_Y_baseline, data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
     is_folds_bcos = (data_raw_text[fold][0][sampled_indices_X_bcos], data_raw_text[fold][1][sampled_indices_y_bcos], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
-    is_folds_iterative_deletion = (data_raw_text[fold][0][sampled_indices_X_cooksD], data_raw_text[fold][1][sampled_indices_y_cooksD], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
+    is_folds_iterative_deletion = (data_raw_text[fold][0][sampled_indices_X_iterative_deletion], data_raw_text[fold][1][sampled_indices_y_iterative_deletion], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
+    is_folds_svc_distance = (data_raw_text[fold][0][sampled_indices_X_SVC], data_raw_text[fold][1][sampled_indices_y_SVC], data_raw_text[fold][2], data_raw_text[fold][3], data_raw_text[fold][4], data_raw_text[fold][5])
     
     data_is_baseline.append(is_folds_baseline)
     data_is_bcos.append(is_folds_bcos)
     data_is_iterative_deletion.append(is_folds_iterative_deletion)
+    data_is_SVC_diagonal_model_results.append(is_folds_svc_distance)
     
     print(f'<TRAIN DATA>: shape original X data in fold {fold}: {data_raw_text[fold][0].shape}; Random Baseline reduced X data shape: {sampled_X_baseline.shape} ')
     
