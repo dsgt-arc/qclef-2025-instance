@@ -154,30 +154,20 @@ class QuboSolver():
         sampler = SimulatedAnnealingSampler()
         
         kbqm = batch.bqm
-# <<<<<<< HEAD
 
-#         response = sampler.sample(kbqm, num_reads=num_reads, seed=12)
-         
-#         # response=qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
-# =======
         if self.sampler=='SA-local':
             response = sampler.sample(kbqm, label=batch.label, num_reads=num_reads)
         else:
             response = qa.submit(sampler, SimulatedAnnealingSampler.sample, kbqm, label=f'2 SA-batch_{i}', num_reads=num_reads) # Please, do the same for Simulated Annealing as well for comparison.
-# >>>>>>> origin/main
 
         final_response = {}
         for var, index in zip(batch.docs_range, sorted(response.first.sample.keys())):
             final_response[var] = response.first.sample[index]
-# <<<<<<< HEAD
-   
-#         return final_response #response.info['problem_id'] 
-# =======
+
         if self.sampler=='SA-local':
             return final_response, None
         else:
             return final_response, response.info['problem_id'] 
-# >>>>>>> origin/main
         
     def _split_in_batches(self, batch_size, start_index=0):
         """Splits the provided initial matrix into batches having size that can be at max
