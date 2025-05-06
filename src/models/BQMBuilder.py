@@ -6,8 +6,6 @@ from scipy.spatial.distance import cdist
 from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from statsmodels.genmod import families
-from statsmodels.genmod.generalized_linear_model import GLM
 from sklearn.svm import SVC
 
 class BQMBuilder(ABC):
@@ -328,11 +326,7 @@ class IterativeDeletion(BQMBuilder):
             float: The computed class balance coefficient.
         """
         influence_scores = self._compute_influence_logistic()
-<<<<<<< HEAD
-   
-=======
-        print('a')
->>>>>>> e6b6d0f239c7a5c43a8907a5b14e9d90f28a65de
+
         return influence_scores
     
     def _compute_influence_logistic(self, target_class=1, cv=5):

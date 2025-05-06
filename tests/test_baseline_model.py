@@ -11,12 +11,15 @@ from box import ConfigBox
 with open("config/config_bcos_run.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
 
-data = pd.read_csv("data/bert_nytEditorialSnippets.csv")
+data_raw_text = pd.read_csv("data/raw_yelp_sample.csv")
+X = data_raw_text.iloc[:, 1:-1].values
+Y = data_raw_text.iloc[:, -1].values
 
-X = data.iloc[:, 1:-1].values
-y = data.iloc[:, -1].values
+data_embeddings = pd.read_csv("data/bert_yelp_sample.csv",index_col=0)
+X_embedding = data_embeddings.iloc[:,1:-1].values
+Y_embedding = data_embeddings.iloc[:,-1].values
 
-orig_folds = utils.k_fold(X, y,  **config.data, printstats=True)
+raw_folds, orig_folds = utils.k_fold(X, Y, X_embedding, Y_embedding, **config.data, printstats=True)
 is_folds = orig_folds.copy()
 
 #Run instance selection first for each fold
@@ -28,6 +31,6 @@ for i in range(len(orig_folds)):
     fold_list[0], fold_list[1] = solver.run_solver()
     is_folds[i] = tuple(fold_list)
 
-evaluator = Evaluator(orig_folds, is_folds)
+evaluator = Evaluator(orig_folds, is_folds, config=config, model_type="logreg")
 results = evaluator.cross_validation()
 print(results)
