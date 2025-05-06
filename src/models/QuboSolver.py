@@ -104,14 +104,10 @@ class QuboSolver():
         building_time = building_time_end - building_time_start
         annealing_time = annealing_time_end - annealing_time_start
 
-# <<<<<<< HEAD
         sampled_X_idx = np.array(list(final_results.values()))==1
         sampled_Y_idx = np.array(list(final_results.values()))==1
         sampled_X = self.X[sampled_X_idx, :]
         sampled_Y = self.Y[sampled_Y_idx]
-# =======
-        # sampled_X = self.X[np.array(list(final_results.values()))==1, :]
-        # sampled_Y = self.Y[np.array(list(final_results.values()))==1]
   
         output = {
             'results': final_results,
@@ -120,14 +116,10 @@ class QuboSolver():
             'sampled_X': sampled_X,
             'sampled_X_idx': sampled_X_idx,
             'sampled_Y': sampled_Y,
-# <<<<<<< HEAD
-#             'sampled_Y_idx': sampled_Y_idx,
-#             'problem_ids': problem_ids
-# =======
+            'sampled_Y_idx': sampled_Y_idx,
             'problem_ids': problem_ids,
             'indices_X': np.array(list(final_results.values()))==1,
             'indices_y': np.array(list(final_results.values()))==1
-# >>>>>>> origin/main
         }
         
         # Return the results and the time statistics

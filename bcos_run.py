@@ -71,16 +71,16 @@ for fold in range(len(data_raw_text)):
     
     print(f'<TRAIN DATA>: shape original X data in fold {fold}: {data_raw_text[fold][0].shape}; Random Baseline reduced X data shape: {sampled_X_baseline.shape} ')
     
-eval_full =  Evaluator(orig_folds=data_raw_text, is_folds=data_raw_text, config=config)
+eval_full =  Evaluator(orig_folds=data_raw_text, is_folds=data_raw_text, config=config, model_type="logreg")
 results_full = eval_full.cross_validation()
 
-eval_baseline = Evaluator(orig_folds = data_raw_text, is_folds=data_is_baseline, config=config)
+eval_baseline = Evaluator(orig_folds = data_raw_text, is_folds=data_is_baseline, config=config, model_type="logreg")
 results_baseline = eval_baseline.cross_validation()
 
-eval_bcos = Evaluator(orig_folds = data_raw_text, is_folds=data_is_bcos, config=config)
+eval_bcos = Evaluator(orig_folds = data_raw_text, is_folds=data_is_bcos, config=config, model_type="logreg")
 results_bcos = eval_bcos.cross_validation()
 
-eval_cooksD = Evaluator(orig_folds = data_raw_text, is_folds=data_is_iterative_deletion, config=config)
+eval_cooksD = Evaluator(orig_folds = data_raw_text, is_folds=data_is_iterative_deletion, config=config, model_type="logreg")
 results_cooksD = eval_cooksD.cross_validation()
 
 print(f'Full sample: {results_full}')

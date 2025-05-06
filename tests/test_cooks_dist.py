@@ -14,13 +14,11 @@ data = pd.read_csv("data/raw_yelp_sample.csv")
 X = data.iloc[:, 2:-1].values
 Y = data.iloc[:, -1].values
 
-data = utils.k_fold(X, Y, **config.data, printstats=True)
-
 data_embed = pd.read_csv("data/bert_yelp_sample.csv")
 X_embed = data_embed.iloc[:, 2:-1].values
 Y_embed = data_embed.iloc[:, -1].values
 
-data_embed = utils.k_fold(X_embed, Y_embed, **config.data, printstats=True)
+data_raw, data = utils.k_fold(X, Y, X_embed, Y_embed, **config.data, printstats=True)
 
 data_is_baseline = []
 data_is_cooks = []
@@ -29,7 +27,7 @@ for fold in range(len(data)):
     baseline = RandomSolver(data[fold][0], data[fold][1], percentage_keep=config.instance_selection.percentage_keep, random_state=config.instance_selection.random_state)
     sampled_X_baseline, sampled_Y_baseline = baseline.run_solver()  
 
-    cooks_model = QuboSolver(data_embed[fold][0], data_embed[fold][1], **config.instance_selection)
+    cooks_model = QuboSolver(data[fold][0], data[fold][1], **config.instance_selection)
     cooks_results = cooks_model.run_QuboSolver(IterativeDeletion)
     sampled_X_cooks = data[fold][0][cooks_results['sampled_X_idx'], :]
     sampled_Y_cooks = data[fold][1][cooks_results['sampled_Y_idx']]
@@ -42,10 +40,10 @@ for fold in range(len(data)):
     
     print(f'<TRAIN DATA>: shape original X data in fold {fold}: {data[0][0].shape}; Random Baseline reduced X data shape: {sampled_X_baseline.shape} ')
 
-eval_cooks =  Evaluator(orig_folds=data, is_folds=data_is_cooks, config=config)
+eval_cooks =  Evaluator(orig_folds=data, is_folds=data_is_cooks, config=config, model_type="logreg")
 results_cooks = eval_cooks.cross_validation()
 
-eval_baseline = Evaluator(orig_folds = data, is_folds=data_is_baseline, config=config)
+eval_baseline = Evaluator(orig_folds = data, is_folds=data_is_baseline, config=config, model_type="logreg")
 results_baseline = eval_baseline.cross_validation()
 
 print(f'Cooks: {results_cooks}')
