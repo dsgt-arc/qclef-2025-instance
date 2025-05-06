@@ -8,20 +8,24 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForSequenceClassification
 
 class Evaluator:
-    def __init__(self, orig_folds, is_folds, config, bert_model: str ="distilbert-base-uncased", num_labels: int = 2, device: str = None, model_type: str = None):
+    def __init__(self, orig_folds, is_folds_raw, is_folds_embed, config, bert_model: str ="distilbert-base-uncased", num_labels: int = 2, device: str = None, model_type: str = None):
         """
         :param folds: Complete list of (X_train, y_train, X_val, y_val, X_test, y_test) splits
         :param instance_selector: List of (X_train, y_train, X_val, y_val, X_test, y_test) splits 
             where X_train and y_train have already gone through the instance selector
         """
         self.orig_folds = orig_folds
-        self.is_folds = is_folds
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(bert_model)
         self.bert_model = bert_model
         self.num_labels = num_labels
         self.config = config
         self.model_type = model_type
+
+        if model_type=="bert":
+            self.is_folds = is_folds_raw
+        else:
+            self.is_folds = is_folds_embed
 
     def size_reduction(self, orig_data, is_data):
         return (len(orig_data) - len(is_data))/len(orig_data)
