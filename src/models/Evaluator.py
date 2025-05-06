@@ -1,4 +1,5 @@
 from src.models.BaselineModel import BaselineTrainer, TokenizedDataset
+from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
 import torch
 from sklearn.metrics import f1_score
@@ -7,7 +8,7 @@ from transformers import AutoTokenizer
 from transformers import AutoModelForSequenceClassification
 
 class Evaluator:
-    def __init__(self, orig_folds, is_folds, config, bert_model: str ="distilbert-base-uncased", num_labels: int = 2, device: str = None):
+    def __init__(self, orig_folds, is_folds, config, bert_model: str ="distilbert-base-uncased", num_labels: int = 2, device: str = None, model_type: str = None):
         """
         :param folds: Complete list of (X_train, y_train, X_val, y_val, X_test, y_test) splits
         :param instance_selector: List of (X_train, y_train, X_val, y_val, X_test, y_test) splits 
@@ -20,47 +21,67 @@ class Evaluator:
         self.bert_model = bert_model
         self.num_labels = num_labels
         self.config = config
+        self.model_type = model_type
 
     def size_reduction(self, orig_data, is_data):
         return (len(orig_data) - len(is_data))/len(orig_data)
     
     def train_model(self, X_train, y_train, X_val, y_val):
         """Trains the model on selected instances."""
-        
-        input_dim = X_train.shape[1]
-        model = AutoModelForSequenceClassification.from_pretrained(self.bert_model, num_labels=self.num_labels).to(self.device)
-        trainer = BaselineTrainer(X_train, y_train, X_val, y_val, model, self.tokenizer, input_dim=input_dim, num_labels=self.num_labels)
-        trainer.train(**self.config.network_model)
-        
-        # AP: here we should have a block that uses the validation sets, e.g. for early stopping or something
-        
-        return trainer.model
 
+        if self.model_type=="bert":        
+            input_dim = X_train.shape[1]
+            model = AutoModelForSequenceClassification.from_pretrained(self.bert_model, num_labels=self.num_labels).to(self.device)
+            trainer = BaselineTrainer(X_train, y_train, X_val, y_val, model, self.tokenizer, input_dim=input_dim, num_labels=self.num_labels)
+            trainer.train(**self.config.network_model)
+            return trainer.model
+
+        elif self.model_type=="logreg":
+            model = LogisticRegression(solver='liblinear', random_state=0)
+            model.fit(X_train, y_train)
+            return model
+        
+        else:
+            print("Incorrect model_type entered")
+            return None
+        
     def evaluate_fold(self, model, X_test, y_test, batch_size=8):
         """Evaluates the trained model on a single test dataset."""
-        model.eval()
-        model.to(self.device)
 
-        X_test = [str(text) for text in X_test]
+        if self.model_type=="bert":
+            model.eval()
+            model.to(self.device)
 
-        dataset = TokenizedDataset(texts = X_test, labels = y_test, tokenizer = self.tokenizer)
-        dataloader = DataLoader(dataset, batch_size=batch_size)
+            X_test = [str(text) for text in X_test]
 
-        all_preds, all_labels = [], []
+            dataset = TokenizedDataset(texts = X_test, labels = y_test, tokenizer = self.tokenizer)
+            dataloader = DataLoader(dataset, batch_size=batch_size)
 
-        with torch.no_grad():
-            for batch in dataloader:
-                input_ids = batch["input_ids"].to(self.device)
-                attention_mask = batch["attention_mask"].to(self.device)
-                labels = batch["labels"].to(self.device)
+            all_preds, all_labels = [], []
 
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-                preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
+            with torch.no_grad():
+                for batch in dataloader:
+                    input_ids = batch["input_ids"].to(self.device)
+                    attention_mask = batch["attention_mask"].to(self.device)
+                    labels = batch["labels"].to(self.device)
 
-                all_preds.extend(preds)
-                all_labels.extend(labels.cpu().numpy())
+                    outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                    preds = torch.argmax(outputs.logits, dim=1).cpu().numpy()
 
-        return f1_score(all_labels, all_preds, average="macro")
+                    all_preds.extend(preds)
+                    all_labels.extend(labels.cpu().numpy())
+
+            return f1_score(all_labels, all_preds, average="macro")
+
+        elif self.model_type=="logreg":
+            all_preds = model.predict(X_test)
+            all_labels = y_test
+
+            return f1_score(all_labels, all_preds, average="macro")
+        
+        else:
+            print("Incorrect model_type entered")
+            return None
 
     def cross_validation(self, num_labels=2):
         """Runs cross-validation by training a model on selected instances, and evaluating it."""
