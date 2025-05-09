@@ -6,33 +6,51 @@ from src.models.QuboSolver import QuboSolver
 from src.models.RandomSolver import RandomSolver
 from src.models.Evaluator import Evaluator
 from box import ConfigBox
+from sklearn.datasets import load_svmlight_file
+from sklearn.model_selection import train_test_split
+import gzip
+import numpy as np
 
 # Load config
 with open("config/config_bcos_run.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
 
-# Need to load and run the bcos method here first, before passing it further
-  
-# Load and split  text data
-# data_raw_text = pd.read_csv("data/vader_nyt/raw_binned_nytEditorialSnippets.csv")
-# X = data_raw_text.iloc[:, 3:-1].values
+#Organizer's data
+data_embeddings = []
+
+for i in range(5):
+    with gzip.open(f'data/nyt/train{i}.gz', 'rb') as f:
+        X_sparse, y = load_svmlight_file(f)
+
+    X_dense = X_sparse.toarray()
+
+    X_train, X_test, y_train, y_test = train_test_split(X_dense, y, test_size=0.2, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, test_size=0.5, random_state=42)
+
+    data_embeddings.append((X_train, y_train, X_val, y_val, X_test, y_test))
+
+data_raw_text = []
+
+for i in range(5):
+    df = pd.read_parquet(f'data/nyt/train_fold_{i}.parquet')
+
+    X_train, X_test, y_train, y_test = train_test_split(np.array(df['text']), np.array(df['label']), test_size=0.2, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_test, y_test, test_size=0.5, random_state=42)
+
+    data_raw_text.append((X_train, y_train, X_val, y_val, X_test, y_test))
+
+#Our data
+# data_raw_text = pd.read_csv("data/raw_binned_nytEditorialSnippets.csv")
+# X = data_raw_text.iloc[:, 2:-1].values
 # Y = data_raw_text.iloc[:, -1].values
 
-# data_embeddings = pd.read_csv("data/vader_nyt/bert_nytEditorialSnippets.csv",index_col=0)
-# X_embedding = data_embeddings.iloc[:,0:-2].values
-# Y_embedding = data_embeddings.iloc[:,-2].values
-
-data_raw_text = pd.read_csv("data/raw_binned_nytEditorialSnippets.csv")
-X = data_raw_text.iloc[:, 2:-1].values
-Y = data_raw_text.iloc[:, -1].values
-
-data_embeddings = pd.read_csv("data/bert_nytEditorialSnippets.csv",index_col=0)
-X_embedding = data_embeddings.iloc[:,2:-1].values
-Y_embedding = data_embeddings.iloc[:,-1].values
+# data_embeddings = pd.read_csv("data/bert_nytEditorialSnippets.csv",index_col=0)
+# X_embedding = data_embeddings.iloc[:,2:-1].values
+# Y_embedding = data_embeddings.iloc[:,-1].values
 
 # data is a list of tuples. Each tuple looks like this: (X_train, y_train, X_val, y_val, X_test, y_test)
 # X_val, y_val should go in the transformer's validation set, X_test and y_test should be untouched and used for true out of sample evaluation as in the paper Table 3 & Figure 3
-data_raw_text, data_embeddings = utils.k_fold(X_raw_text=X, y_raw_text=Y, X_embeddings=X_embedding, y_embeddings=Y_embedding, **config.data, printstats=True)
+# data_raw_text, data_embeddings = utils.k_fold(X_raw_text=X, y_raw_text=Y, X_embeddings=X_embedding, y_embeddings=Y_embedding, **config.data, printstats=True)
 
 data_is_baseline_raw = []
 data_is_baseline_embed = []
