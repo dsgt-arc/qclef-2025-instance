@@ -7,6 +7,7 @@ from sklearn.linear_model import LogisticRegressionCV, LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
+from joblib import Parallel, delayed
 
 class BQMBuilder(ABC):
     """
@@ -354,18 +355,32 @@ class IterativeDeletion(BQMBuilder):
         influence_scores = np.empty(n)
 
         # Leave-one-out retraining
-        for i in range(n):
-            mask = np.ones(n, dtype=bool)
-            mask[i] = False
-            X_sub, y_sub = self.batch.Xbatch[mask], self.batch.Ybatch[mask]
-            reduced_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42) 
-            reduced_model.fit(X_sub, y_sub)
+        # for i in range(n):
+        #     mask = np.ones(n, dtype=bool)
+        #     mask[i] = False
+        #     X_sub, y_sub = self.batch.Xbatch[mask], self.batch.Ybatch[mask]
+        #     reduced_model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42) 
+        #     reduced_model.fit(X_sub, y_sub)
             
-            new_probs = reduced_model.predict_proba(self.batch.Xbatch)[:, target_class]
+        #     new_probs = reduced_model.predict_proba(self.batch.Xbatch)[:, target_class]
             
-            influence_scores[i] = np.mean(np.abs(new_probs - baseline_probs))
+        #     influence_scores[i] = np.mean(np.abs(new_probs - baseline_probs))
+
+        influence_scores = Parallel(n_jobs=-1)(
+            delayed(self._influence_logistic)(i, self.batch.Xbatch, self.batch.Ybatch, baseline_probs, target_class)
+            for i in range(n)
+        )
  
-        return -influence_scores
+        return -np.array(influence_scores)
+    
+    def _influence_logistic(self, i, X, y, baseline_probs, target_class):
+        mask = np.ones(len(y), dtype=bool)
+        mask[i] = False
+        X_sub, y_sub = X[mask], y[mask]
+        model = LogisticRegression(solver='lbfgs', max_iter=1000, random_state=42)
+        model.fit(X_sub, y_sub)
+        new_probs = model.predict_proba(X)[:, target_class]
+        return np.mean(np.abs(new_probs - baseline_probs))
   
     def _bcos_off_diagonal(self):
         """
