@@ -1,7 +1,7 @@
 from src import utils
 import pandas as pd
 import yaml
-from src.models.BQMBuilder import BcosQmatPaper, SVC_diagonal, IterativeDeletion
+from src.models.BQMBuilder import BcosQmatPaper, SVC_diagonal, IterativeDeletion, SVC_iterative_combined
 from src.models.RandomSolver import RandomSolver
 from src.models.QuboSolver import QuboSolver
 #from src.models.Evaluator import Evaluator
@@ -12,13 +12,13 @@ import pdb
 import numpy as np
  
 # Load config
-with open("config/config_bcos_run.yml", "r") as file:
+with open("team_workspace/2A/qclef-2025-instance/config/config_bcos_run.yml", "r") as file:
     config = ConfigBox(yaml.safe_load(file))
 
 filepath = 'team_workspace/2A/qclef-2025-instance/outputs/'
-dataset = 'Yelp'
+dataset = 'Vader'
 method = 'SA'
-submissionID = 'it_del_075' #bcos, random, svc, it_del
+submissionID = 'combined_075' #bcos, random, svc, it_del
 
 if dataset == "Yelp":
     filedir =  'yelp_reviews_2L'
@@ -28,7 +28,7 @@ if dataset == "Vader":
 
 results_per_fold = []
 for i in tqdm(range(5)):
-    X, y = load_svmlight_file(f"data/{filedir}/train{i}.gz", n_features=4096)
+    X, y = load_svmlight_file(f"datasets/Tasks/2A/{filedir}/llama/train{i}.gz", n_features=4096)
  
     X_dense = pd.DataFrame(X.toarray())
 
@@ -39,10 +39,10 @@ for i in tqdm(range(5)):
     inverse_indices = np.argsort(shuffled_indices)   
 
     is_model = QuboSolver(X=X_dense_shuffled, Y=y_shuffled, sampler=method, **config.instance_selection)
-    is_results = is_model.run_QuboSolver(IterativeDeletion)
-    results_per_fold.append(is_results) 
-    
+    is_results = is_model.run_QuboSolver(SVC_iterative_combined)
     selected_samples_shuffled = [key for key, value in is_results['results'].items() if value == 1]
+    results_per_fold.append(is_results)
+    
     selected_samples_original = [shuffled_indices[sample] for sample in selected_samples_shuffled]
 
     filename = f"{filepath}{dataset}_{i}_{method}_{'ds-at-gt-qclef'}_{submissionID}.txt"
