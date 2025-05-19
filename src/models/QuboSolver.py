@@ -53,7 +53,7 @@ class QuboSolver():
         # This can be also parralelized if SA
         for batch in tqdm(batches):
  
-            bqm_model = qmat_method(batch, self.percentage_keep, self.Y.shape[0], **kwargs)
+            bqm_model = qmat_method(batch, X=self.X, y=self.Y, percentage_keep=self.percentage_keep, sample_size=self.Y.shape[0], **kwargs)
             batch.bqm = bqm_model._create_bqm()
             
         building_time_end = time.time() 
