@@ -39,19 +39,6 @@ for i in range(5):
 
     data_raw_text.append((X_train, y_train, X_val, y_val, X_test, y_test))
 
-#Our data
-# data_raw_text = pd.read_csv("data/raw_binned_nytEditorialSnippets.csv")
-# X = data_raw_text.iloc[:, 2:-1].values
-# Y = data_raw_text.iloc[:, -1].values
-
-# data_embeddings = pd.read_csv("data/bert_nytEditorialSnippets.csv",index_col=0)
-# X_embedding = data_embeddings.iloc[:,2:-1].values
-# Y_embedding = data_embeddings.iloc[:,-1].values
-
-# data is a list of tuples. Each tuple looks like this: (X_train, y_train, X_val, y_val, X_test, y_test)
-# X_val, y_val should go in the transformer's validation set, X_test and y_test should be untouched and used for true out of sample evaluation as in the paper Table 3 & Figure 3
-# data_raw_text, data_embeddings = utils.k_fold(X_raw_text=X, y_raw_text=Y, X_embeddings=X_embedding, y_embeddings=Y_embedding, **config.data, printstats=True)
-
 data_is_baseline_raw = []
 data_is_baseline_embed = []
 data_is_bcos_raw = []
